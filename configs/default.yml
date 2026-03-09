@@ -1,0 +1,18 @@
+
+project:
+	name: ScriptFormer
+
+data:
+	input_dir: ../data/
+
+transforms:
+	binarization:
+		method: otsu 
+		sauvola:
+			window_size: 25
+			k: 0.2
+	denoising:
+		method: morphological 
+		morphological:
+			kernel_size: 3
+
