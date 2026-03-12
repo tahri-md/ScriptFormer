@@ -1,59 +1,5 @@
-# Byte-compiled / optimized files
 __pycache__/
-*.py[cod]
 
-# Virtual environments
 .venv/
-venv/
-env/
-ENV/
 
-# VS Code settings
-.vscode/
-
-# PyCharm settings
-.idea/
-
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints/
-
-# Test, coverage, and cache
-.pytest_cache/
-.mypy_cache/
-.hypothesis/
-.tox/
-.coverage
-coverage.xml
-
-# Model checkpoints, logs, and outputs
-checkpoints/
-runs/
-logs/
-output/
-*.ckpt
-*.pth
-*.pt
-*.onnx
-
-# Data and intermediate files
 *.csv
-*.tsv
-*.pkl
-*.h5
-*.npz
-*.npy
-
-# Tokenizer and config artifacts
-tokenizer.json
-
-# System files
-.DS_Store
-Thumbs.db
-
-# Temporary files
-*.tmp
-*.swp
-*.swo
-
-# Ignore user-specific configs (optional)
-# configs/*.yaml
