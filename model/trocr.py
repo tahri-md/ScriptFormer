@@ -18,7 +18,7 @@ class ConvBlock(nn.Module):
         x = self.pool(x)
         return x
 
-class CNNEncoder(nn.module):
+class CNNEncoder(nn.Module):
     def __init__(self,hidden_size:int = 256,dropout:float=0.1):
         super().__init__()
         self.block1 = ConvBlock(1,32)
@@ -47,7 +47,7 @@ class CNNEncoder(nn.module):
 class PositionalEncoding(nn.Module):
     def __init__(self,hidden_size:int,max_length:int=200,dropout:float = 0.1):
         super().__init__()
-        self.dropout()= nn.dropout(dropout)
+        self.dropout = nn.dropout(dropout)
         pe = torch.zeros(max_length,hidden_size)
         position = torch.arange(0,max_length).unsqueeze1().float()
         div_term = torch.exp(

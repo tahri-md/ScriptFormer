@@ -1,7 +1,7 @@
 from typing import Optional
 import json
 
-class ArabicChartTokenizer:
+class ArabicCharTokenizer:
     def __init__(self, pad_token: str = "<PAD>", sos_token: str = "<SOS>",
                  eos_token: str = "<EOS>", unk_token: str = "<UNK>"):
         self.pad_token = pad_token
@@ -84,5 +84,5 @@ class ArabicChartTokenizer:
         self.id_to_char = {int(v):k for k,v in self.char_to_id.items()}
         self.special_tokens = data["special_tokens"]
         self.vocab_size = len(self.char_to_id)
-        
+
 

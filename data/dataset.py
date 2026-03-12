@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from preprocessing import ManuscriptPreprocessor
-from data import ArabicCharTokenizer
+from .tokenizer import ArabicCharTokenizer
 
 class ArabicOCRDataset(Dataset):
     def __init__(
@@ -42,79 +42,80 @@ class ArabicOCRDataset(Dataset):
         token_tensor = torch.tensor(token_ids,dtype=torch.long)
         return image_tensor,token_tensor,sample["text"]
     
-    def collate_fn(batch:list,pad_id:int = 0) ->dict :
-        images,token_seqs,texts = zip(*batch)
-        images = torch.stack(images,dim=0)
-        max_len =max(seq.shape[0] for seq in token_seqs)
-        padded_tokens = []
-        attention_masks = []
+
+def collate_fn(batch:list,pad_id:int = 0) ->dict :
+    images,token_seqs,texts = zip(*batch)
+    images = torch.stack(images,dim=0)
+    max_len =max(seq.shape[0] for seq in token_seqs)
+    padded_tokens = []
+    attention_masks = []
         
-        for seq in token_seqs:
-            seq_len = seq.shape[0]
-            pad_len = max_len - seq_len
+    for seq in token_seqs:
+        seq_len = seq.shape[0]
+        pad_len = max_len - seq_len
 
-            padded = torch.cat([seq, torch.full((pad_len,), pad_id, dtype=torch.long)])
-            padded_tokens.append(padded)
+        padded = torch.cat([seq, torch.full((pad_len,), pad_id, dtype=torch.long)])
+        padded_tokens.append(padded)
 
-            mask = torch.cat([torch.ones(seq_len, dtype=torch.long),
-                            torch.zeros(pad_len, dtype=torch.long)])
-            attention_masks.append(mask)
+        mask = torch.cat([torch.ones(seq_len, dtype=torch.long),
+                        torch.zeros(pad_len, dtype=torch.long)])
+        attention_masks.append(mask)
 
-        return {
-            "images": images,                                  
-            "token_ids": torch.stack(padded_tokens, dim=0),    
-            "attention_mask": torch.stack(attention_masks, dim=0), 
-            "texts": list(texts),                                
-        }
+    return {
+        "images": images,                                  
+        "token_ids": torch.stack(padded_tokens, dim=0),    
+        "attention_mask": torch.stack(attention_masks, dim=0), 
+        "texts": list(texts),                                
+    }
 
-    def create_dataloaders(
-        train_samples: list[dict],
-        val_samples: list[dict],
-        tokenizer: ArabicCharTokenizer,
-        preprocessor: ManuscriptPreprocessor,
-        config: dict,
+def create_dataloaders(
+    train_samples: list[dict],
+    val_samples: list[dict],
+    tokenizer: ArabicCharTokenizer,
+    preprocessor: ManuscriptPreprocessor,
+    config: dict,
     ) -> tuple[DataLoader, DataLoader]:
-        img_h = config["data"]["image"]["height"]
-        img_w = config["data"]["image"]["width"]
-        max_len = config["model"]["decoder"]["max_length"]
-        batch_size = config["training"]["batch_size"]
+    img_h = config["data"]["image"]["height"]
+    img_w = config["data"]["image"]["width"]
+    max_len = config["model"]["decoder"]["max_length"]
+    batch_size = config["training"]["batch_size"]
 
-        train_dataset = ArabicOCRDataset(
-            samples=train_samples,
-            tokenizer=tokenizer,
-            preprocessor=preprocessor,
-            image_height=img_h,
-            image_width=img_w,
-            max_length=max_len,
-        )
-        val_dataset = ArabicOCRDataset(
-            samples=val_samples,
-            tokenizer=tokenizer,
-            preprocessor=preprocessor,
-            image_height=img_h,
-            image_width=img_w,
-            max_length=max_len,
-        )
+    train_dataset = ArabicOCRDataset(
+        samples=train_samples,
+        tokenizer=tokenizer,
+        preprocessor=preprocessor,
+        image_height=img_h,
+        image_width=img_w,
+        max_length=max_len,
+    )
+    val_dataset = ArabicOCRDataset(
+        samples=val_samples,
+        tokenizer=tokenizer,
+        preprocessor=preprocessor,
+        image_height=img_h,
+        image_width=img_w,
+        max_length=max_len,
+    )
 
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=batch_size,
-            shuffle=True,        
-            collate_fn=lambda b: collate_fn(b, pad_id=tokenizer.pad_id),
-            num_workers=2,      
-            pin_memory=True,      
-            drop_last=True,        
-        )
-        val_loader = DataLoader(
-            val_dataset,
-            batch_size=batch_size,
-            shuffle=False,        
-            collate_fn=lambda b: collate_fn(b, pad_id=tokenizer.pad_id),
-            num_workers=2,
-            pin_memory=True,
-        )
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,        
+        collate_fn=lambda b: collate_fn(b, pad_id=tokenizer.pad_id),
+        num_workers=2,      
+        pin_memory=True,      
+        drop_last=True,        
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,        
+        collate_fn=lambda b: collate_fn(b, pad_id=tokenizer.pad_id),
+        num_workers=2,
+        pin_memory=True,
+    )
 
-        print(f"  [DataLoader] Train: {len(train_dataset)} samples, {len(train_loader)} batches")
-        print(f"  [DataLoader] Val:   {len(val_dataset)} samples, {len(val_loader)} batches")
+    print(f"  [DataLoader] Train: {len(train_dataset)} samples, {len(train_loader)} batches")
+    print(f"  [DataLoader] Val:   {len(val_dataset)} samples, {len(val_loader)} batches")
 
-        return train_loader, val_loader
+    return train_loader, val_loader
