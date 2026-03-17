@@ -33,7 +33,7 @@ class ArabicOCRDataset(Dataset):
             raise FileNotFoundError(f"could not load image{sample['image_path']}")
         
         processed = self.preprocessor(raw_image,target_height=self.image_height,target_width=self.image_width)
-        image_tensor = torch.from_numpy(processed).unssqueeze(0).float()
+        image_tensor = torch.from_numpy(processed).unsqueeze(0).float()
         token_ids = self.tokenizer.encode(
             sample["text"],
             add_special_tokens=True,

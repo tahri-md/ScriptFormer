@@ -128,20 +128,24 @@ def parse_khatt_csv(csv_path:str,image_dir:str,image_ext:str=".jpg"):
     return samples    
 
 def parse_khatt_dataset(data_root:str)->dict:
+    from pathlib import Path
     result = {}
-    train_csv = data_root / "Train.csv"
-    train_images = data_root / "Train_deskewed" / "Train_deskewed"
+    root = Path(data_root)
+    train_csv = root / "Train.csv"
+    train_images = root / "Train_deskewed" / "Train_deskewed"
     if train_csv.exists() and train_images.exists():
-        result["train"] = parse_khatt_csv(str(train_csv),str(train_images))
+        result["train"] = parse_khatt_csv(str(train_csv), str(train_images))
     else:
         print("train data not found")
         result["train"] = []
-    
-    val_csv = data_root / "Validation.csv"
-    val_images = data_root / "Validate_deskewed" / "Validate_deskewed"
+
+    val_csv = root / "Validation.csv"
+    val_images = root / "Validate_deskewed" / "Validate_deskewed"
     if val_csv.exists() and val_images.exists():
-        result["val"] = parse_khatt_csv(str(val_csv),str(train_images))
+        result["val"] = parse_khatt_csv(str(val_csv), str(val_images))
     else:
         print("validation data not found")
         result["val"] = []
+
+    return result
 

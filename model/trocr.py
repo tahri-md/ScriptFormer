@@ -47,9 +47,9 @@ class CNNEncoder(nn.Module):
 class PositionalEncoding(nn.Module):
     def __init__(self,hidden_size:int,max_length:int=200,dropout:float = 0.1):
         super().__init__()
-        self.dropout = nn.dropout(dropout)
+        self.dropout = nn.Dropout(dropout)
         pe = torch.zeros(max_length,hidden_size)
-        position = torch.arange(0,max_length).unsqueeze1().float()
+        position = torch.arange(0, max_length).unsqueeze(1).float()
         div_term = torch.exp(
                     torch.arange(0, hidden_size, 2).float() * (-math.log(10000.0) / hidden_size)
                 )
@@ -162,7 +162,7 @@ class ScriptFormer(nn.Module):
             dropout=dropout,
         )
 
-        self.decoder = TransformerDecoder(
+        self.decoder = TransfomerDecoder(
             vocab_size=vocab_size,
             hidden_size=decoder_hidden,
             num_layers=decoder_layers,

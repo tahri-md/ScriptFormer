@@ -1,18 +1,126 @@
+# ============================================================
+# ScriptFormer - Default Configuration
+# ============================================================
+# This file controls ALL hyperparameters and paths.
+# To run a new experiment, copy this file and change values.
+# Never hardcode values in Python — always read from config.
+# ============================================================
 
+# --- Project ---
 project:
-	name: ScriptFormer
+  name: "scriptformer"
+  seed: 42                    # For reproducibility (same seed = same results)
+  device: "cpu"               # "cpu" or "cuda" — we'll use cpu locally, cuda on Colab
 
+# --- Data ---
 data:
-	input_dir: ../data/
+  # Where raw manuscript images live
+  raw_dir: "data/raw"
+  # Where preprocessed images go
+  processed_dir: "data/processed"
+  # Ground truth annotations (image path → Arabic text)
+  annotations_file: "data/annotations.csv"
 
-transforms:
-	binarization:
-		method: otsu 
-		sauvola:
-			window_size: 25
-			k: 0.2
-	denoising:
-		method: morphological 
-		morphological:
-			kernel_size: 3
+  # Train/val/test split ratios (must sum to 1.0)
+  train_ratio: 0.8
+  val_ratio: 0.1
+  test_ratio: 0.1
 
+  # Image dimensions after preprocessing
+  # Why 384x64? Width=384 captures a full text line, Height=64 is enough for Arabic script
+  image:
+    height: 64
+    width: 384
+    channels: 1              # 1 = grayscale (manuscripts are B&W after binarization)
+
+# --- Preprocessing ---
+preprocessing:
+  binarization:
+    method: "sauvola"        # "otsu" (global) or "sauvola" (adaptive, better for manuscripts)
+    window_size: 25          # For Sauvola: size of local neighborhood
+    k: 0.2                   # For Sauvola: sensitivity parameter
+
+  denoising:
+    enabled: true
+    method: "morphological"  # "gaussian", "median", or "morphological"
+    kernel_size: 3
+
+  # Data augmentation (makes model robust to real-world variation)
+  augmentation:
+    enabled: true
+    rotation_range: 3        # degrees — manuscripts are rarely perfectly straight
+    elastic_distortion: true # simulates paper warping
+    brightness_range: 0.2    # simulates ink fading
+    noise_sigma: 0.02        # simulates paper grain/texture
+
+# --- Tokenizer ---
+# Converts Arabic text ↔ numbers (model works with numbers, not letters)
+tokenizer:
+  type: "character"          # "character" (each letter = 1 token) or "bpe" (subword)
+  # Special tokens the model needs
+  pad_token: "<PAD>"         # Padding — fills short sequences to equal length
+  sos_token: "<SOS>"         # Start-of-sequence — tells decoder to start generating
+  eos_token: "<EOS>"         # End-of-sequence — tells decoder to stop
+  unk_token: "<UNK>"         # Unknown — for characters not seen during training
+
+# --- Model ---
+model:
+  # === ENCODER (Vision Transformer) ===
+  # Takes an image → sequence of visual features
+  encoder:
+    type: "vit"              # Vision Transformer
+    pretrained: true         # Start from pretrained weights (transfer learning)
+    pretrained_model: "google/vit-base-patch16-224"
+    patch_size: 16           # Image is split into 16x16 patches
+    hidden_size: 768         # Dimension of each patch's representation
+    num_layers: 12           # Number of transformer encoder layers
+    num_heads: 12            # Number of attention heads (768/12 = 64 dim per head)
+    dropout: 0.1
+
+  # === DECODER (Autoregressive Transformer) ===
+  # Takes visual features → generates Arabic text one token at a time
+  decoder:
+    type: "transformer"
+    hidden_size: 256         # Smaller than encoder (text is simpler than images)
+    num_layers: 6            # 6 decoder layers
+    num_heads: 8             # 8 attention heads (256/8 = 32 dim per head)
+    feedforward_size: 1024   # FFN intermediate size (usually 4x hidden_size)
+    dropout: 0.1
+    max_length: 128          # Maximum output sequence length (chars)
+
+# --- Training ---
+training:
+  epochs: 50
+  batch_size: 16             # Reduce to 4-8 if you run out of memory
+  learning_rate: 0.0001      # 1e-4, standard for fine-tuning transformers
+  weight_decay: 0.01         # L2 regularization (prevents overfitting)
+  warmup_steps: 500          # LR slowly increases for first 500 steps (stabilizes training)
+  max_grad_norm: 1.0         # Gradient clipping (prevents exploding gradients)
+
+  # Optimizer
+  optimizer: "adamw"         # AdamW = Adam + proper weight decay (best for transformers)
+
+  # Learning rate scheduler
+  scheduler: "cosine"        # "cosine" (smooth decay) or "step" (sudden drops)
+
+  # Checkpointing
+  checkpoint_dir: "checkpoints"
+  save_every: 5              # Save model every 5 epochs
+  early_stopping:
+    enabled: true
+    patience: 10             # Stop if no improvement for 10 epochs
+    metric: "val_cer"        # Monitor Character Error Rate on validation set
+
+# --- Evaluation ---
+evaluation:
+  metrics:
+    - "cer"                  # Character Error Rate (primary metric for OCR)
+    - "wer"                  # Word Error Rate
+  beam_size: 5               # Beam search width during inference (higher = better but slower)
+
+# --- Logging ---
+logging:
+  level: "INFO"
+  log_dir: "logs"
+  tensorboard: true          # Visualize training curves
+  log_every: 50              # Log metrics every 50 steps

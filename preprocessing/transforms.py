@@ -7,7 +7,7 @@ def to_grayscale(image:np.ndarray)->np.ndarray:
         return image
     if image.shape[2]==1:
         return image.squeeze(axis=2)
-    return cv2.cvtColor(image,cv2.COLOR_BG2GRAY)
+    return cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
 
 def binarize_otsu(image:np.ndarray)->np.ndarray:
     _,binary = cv2.threshold(image,0,255,cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
@@ -86,16 +86,12 @@ class ManuscriptPreprocessor:
 
     def __call__(self, image: np.ndarray, target_height: int = 64, target_width: int = 384) -> np.ndarray:
         img = to_grayscale(image)
-
-        img = binarize(img, method=self.bin_method,
-                       window_size=self.bin_window, k=self.bin_k)
+        # binarize expects image first, then method, then kwargs
+        img = binarize(self.bin_method, img, window_size=self.bin_window, k=self.bin_k)
 
         if self.denoise_enabled:
-            img = denoise(img, method=self.denoise_method,
-                         kernel_size=self.denoise_kernel)
+            img = denoise(img, method=self.denoise_method, kernel_size=self.denoise_kernel)
 
         img = resize_and_pad(img, target_height=target_height, target_width=target_width)
-
         img = normalize(img)
-
         return img

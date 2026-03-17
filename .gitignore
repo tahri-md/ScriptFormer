@@ -2,6 +2,10 @@ __pycache__/
 
 .venv/
 
-*.csv
 configs/
-KHATT/
+data/raw/KHATT/
+checkpoints/
+*.pt
+*.pth
+*.bin
+*.ckpt
