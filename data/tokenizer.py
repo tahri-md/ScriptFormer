@@ -48,13 +48,15 @@ class ArabicCharTokenizer:
 
     def decode(self, ids: list[int], remove_special_tokens: bool = True) -> str:
         chars = []
+        special_ids = {self.char_to_id[token] for token in self.special_tokens}
+
         for id in ids:
-            if id in self.special_tokens:
-                if id == self.char_to_id[self.eos_token]:
+            if remove_special_tokens and id in special_ids:
+                if id == self.eos_id:
                     break
                 continue
-            chars.append(self.id_to_char.get(id,self.unk_token))
-        
+            chars.append(self.id_to_char.get(id, self.unk_token))
+
         return "".join(chars)
 
     @property

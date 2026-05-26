@@ -108,7 +108,7 @@ training:
   save_every: 5              # Save model every 5 epochs
   early_stopping:
     enabled: true
-    patience: 10             # Stop if no improvement for 10 epochs
+    patience: 7              # Stop if no improvement for 7 epochs
     metric: "val_cer"        # Monitor Character Error Rate on validation set
 
 # --- Evaluation ---
