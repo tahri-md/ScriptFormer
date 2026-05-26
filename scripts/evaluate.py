@@ -14,6 +14,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config",type=str,default="configs/default.yaml")
     parser.add_argument("--checkpoint",type=str,default="checkpoint/best_model.pt")
+    parser.add_argument("--tokenizer",type=str,default=None)
     parser.add_argument("--show_samples",type=int,default=5)
     parser.add_argument("--max-length",type=int,default=None)
     parser.add_argument("--no_postprocess",action="store_true")
@@ -29,8 +30,11 @@ def main():
         print(f"Using config from {args.config}")
 
     device = config["project"]["device"]
+    if device == "cuda" and not torch.cuda.is_available():
+        device = "cpu"
+        print("CUDA not available, falling back to CPU")
 
-    tokenizer_path = os.path.join(
+    tokenizer_path = args.tokenizer or os.path.join(
         os.path.dirname(args.checkpoint), "tokenizer.json"
     )
     if os.path.exists(tokenizer_path):
@@ -38,11 +42,9 @@ def main():
         tokenizer.load(tokenizer_path)
         print(f"Loaded tokenizer from {tokenizer_path}")
     else:
-        print("Tokenizer not found in checkpoint dir, rebuilding from data...")
-        data = parse_khatt_dataset(config["data"]["raw_dir"] + "/KHATT")
-        tokenizer = ArabicCharTokenizer()
-        tokenizer.build_vocab(
-            [s["text"] for s in data["train"] + data["val"]]
+        raise FileNotFoundError(
+            f"Tokenizer not found at {tokenizer_path}. "
+            "Copy tokenizer.json from the Kaggle training artifacts or pass --tokenizer."
         )
     print(f"Vocab size: {tokenizer.vocab_size}")
 
@@ -80,6 +82,12 @@ def main():
 
     data = parse_khatt_dataset(config["data"]["raw_dir"] + "/KHATT")
     val_samples = data["val"]
+    if not val_samples:
+        raise FileNotFoundError(
+            "No validation samples were found. "
+            "Make sure the KHATT validation CSV and images are available under data/raw/KHATT, "
+            "or run prediction with scripts/predict.py instead of evaluation."
+        )
 
     preprocessor = ManuscriptPreprocessor(config["preprocessing"])
     val_dataset = ArabicOCRDataset(

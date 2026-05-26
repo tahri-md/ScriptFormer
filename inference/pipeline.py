@@ -41,6 +41,7 @@ class OCRPipeline:
         config_path: str = "configs/default.yaml",
         device: str = None,
         postprocessor: ArabicPostProcessor = None,
+        tokenizer_path: str = None,
     ) -> "OCRPipeline":
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
@@ -54,15 +55,16 @@ class OCRPipeline:
             device = "cuda" if torch.cuda.is_available() else "cpu"
 
         checkpoint_dir = os.path.dirname(checkpoint_path)
-        tokenizer_path = os.path.join(checkpoint_dir, "tokenizer.json")
+        resolved_tokenizer_path = tokenizer_path or os.path.join(checkpoint_dir, "tokenizer.json")
 
-        if os.path.exists(tokenizer_path):
+        if os.path.exists(resolved_tokenizer_path):
             tokenizer = ArabicCharTokenizer()
-            tokenizer.load(tokenizer_path)
+            tokenizer.load(resolved_tokenizer_path)
         else:
             raise FileNotFoundError(
-                f"Tokenizer not found at {tokenizer_path}. "
-                "Make sure tokenizer.json was saved during training."
+                f"Tokenizer not found at {resolved_tokenizer_path}. "
+                "If you trained in Kaggle, copy tokenizer.json from the training artifacts "
+                "or pass --tokenizer to point to the saved tokenizer file."
             )
 
         dec_cfg = config["model"]["decoder"]

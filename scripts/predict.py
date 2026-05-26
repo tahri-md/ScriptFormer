@@ -14,6 +14,7 @@ def main():
     parser.add_argument("--dir", type=str, default=None)
     parser.add_argument("--checkpoint", type=str, default="checkpoints/best_model.pt")
     parser.add_argument("--config", type=str, default="configs/default.yaml")
+    parser.add_argument("--tokenizer", type=str, default=None)
     parser.add_argument("--max-length", type=int, default=None)
     parser.add_argument("--no-postprocess", action="store_true")
     parser.add_argument("--normalize-alef", action="store_true", default=True)
@@ -34,6 +35,7 @@ def main():
         checkpoint_path=args.checkpoint,
         config_path=args.config,
         postprocessor=postprocessor,
+        tokenizer_path=args.tokenizer,
     )
 
     if args.image:
