@@ -21,8 +21,9 @@ class OCRPipeline:
         postprocessor: ArabicPostProcessor = None,
         device: str = "cpu",
         image_height: int = 64,
-        image_width: int = 384,
+        image_width: int = 1024,
         max_length: int = 128,
+        beam_size: int = 1,
     ):
         self.model = model.to(device)
         self.model.eval()
@@ -33,6 +34,7 @@ class OCRPipeline:
         self.image_height = image_height
         self.image_width = image_width
         self.max_length = max_length
+        self.beam_size = beam_size
 
     @classmethod
     def from_checkpoint(
@@ -42,6 +44,7 @@ class OCRPipeline:
         device: str = None,
         postprocessor: ArabicPostProcessor = None,
         tokenizer_path: str = None,
+        beam_size: int = None,
     ) -> "OCRPipeline":
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
@@ -103,6 +106,10 @@ class OCRPipeline:
 
         preprocessor = ManuscriptPreprocessor(config["preprocessing"])
 
+        resolved_beam_size = beam_size
+        if resolved_beam_size is None:
+            resolved_beam_size = config.get("evaluation", {}).get("beam_size", 1)
+
         return cls(
             model=model,
             tokenizer=tokenizer,
@@ -112,6 +119,7 @@ class OCRPipeline:
             image_height=config["data"]["image"]["height"],
             image_width=config["data"]["image"]["width"],
             max_length=dec_cfg["max_length"],
+            beam_size=resolved_beam_size,
         )
 
     def _load_and_preprocess(self, image_path: str) -> torch.Tensor:
@@ -128,25 +136,31 @@ class OCRPipeline:
         tensor = torch.from_numpy(processed).unsqueeze(0).unsqueeze(0).float()
         return tensor.to(self.device)
 
-    def predict(self, image_path: str, max_length: int = None) -> str:
+    def predict(self, image_path: str, max_length: int = None, beam_size: int = None) -> str:
         if max_length is None:
             max_length = self.max_length
+        if beam_size is None:
+            beam_size = self.beam_size
 
         image_tensor = self._load_and_preprocess(image_path)
 
         with torch.no_grad():
-            generated_ids = self.model.generate(image_tensor, max_length=max_length)
+            generated_ids = self.model.generate(
+                image_tensor,
+                max_length=max_length,
+                beam_size=beam_size,
+            )
 
         text = self.tokenizer.decode(generated_ids[0].tolist())
         text = self.postprocessor(text)
 
         return text
 
-    def predict_batch(self, image_paths: list[str], max_length: int = None) -> list[dict]:
+    def predict_batch(self, image_paths: list[str], max_length: int = None, beam_size: int = None) -> list[dict]:
         results = []
         for path in image_paths:
             try:
-                text = self.predict(path, max_length=max_length)
+                text = self.predict(path, max_length=max_length, beam_size=beam_size)
                 results.append({"path": path, "text": text})
             except Exception as e:
                 results.append({"path": path, "text": "", "error": str(e)})
@@ -157,6 +171,7 @@ class OCRPipeline:
         directory: str,
         extensions: tuple = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"),
         max_length: int = None,
+        beam_size: int = None,
     ) -> list[dict]:
         image_paths = []
         for ext in extensions:
@@ -168,4 +183,4 @@ class OCRPipeline:
         if not image_paths:
             return []
 
-        return self.predict_batch(image_paths, max_length=max_length)
+        return self.predict_batch(image_paths, max_length=max_length, beam_size=beam_size)

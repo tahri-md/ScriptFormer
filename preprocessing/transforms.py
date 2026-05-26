@@ -49,7 +49,7 @@ def denoise(image: np.ndarray, method: str = "morphological", **kwargs) -> np.nd
         raise ValueError(f"Unknown denoising method: {method}")
     return methods[method](image, **kwargs)
 
-def resize_and_pad(image:np.ndarray,target_height:int=64,target_width:int=384):
+def resize_and_pad(image:np.ndarray,target_height:int=64,target_width:int=1024):
     h,w = image.shape[:2]
     scale = target_height / h
     new_width = int(w* scale)
@@ -84,7 +84,7 @@ class ManuscriptPreprocessor:
         self.denoise_method = config.get("denoising", {}).get("method", "morphological")
         self.denoise_kernel = config.get("denoising", {}).get("kernel_size", 3)
 
-    def __call__(self, image: np.ndarray, target_height: int = 64, target_width: int = 384) -> np.ndarray:
+    def __call__(self, image: np.ndarray, target_height: int = 64, target_width: int = 1024) -> np.ndarray:
         img = to_grayscale(image)
         # binarize expects image first, then method, then kwargs
         img = binarize(self.bin_method, img, window_size=self.bin_window, k=self.bin_k)

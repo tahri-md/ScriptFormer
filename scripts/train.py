@@ -50,7 +50,8 @@ def main():
     train_samples = data["train"]
     val_samples = data["val"]
 
-    tokenizer = ArabicCharTokenizer()
+    tokenizer_cfg = config.get("tokenizer", {}).get("normalization", {})
+    tokenizer = ArabicCharTokenizer(**tokenizer_cfg)
     all_texts = [s["text"] for s in train_samples + val_samples]
     tokenizer.build_vocab(all_texts)
 

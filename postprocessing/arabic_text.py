@@ -21,6 +21,34 @@ OPTIONAL_NORMALIZATIONS = {
 }
 
 
+def normalize_arabic_text(
+    text: str,
+    remove_special_tokens: bool = False,
+    fix_repetitions: bool = False,
+    max_char_repeat: int = 2,
+    normalize_whitespace: bool = True,
+    normalize_alef: bool = True,
+    normalize_taa_marbuta: bool = False,
+    normalize_alef_maqsura: bool = False,
+    remove_diacritics: bool = False,
+    clean_punctuation: bool = False,
+    strip_non_arabic: bool = False,
+) -> str:
+    processor = ArabicPostProcessor(
+        remove_special_tokens=remove_special_tokens,
+        fix_repetitions=fix_repetitions,
+        max_char_repeat=max_char_repeat,
+        normalize_whitespace=normalize_whitespace,
+        normalize_alef=normalize_alef,
+        normalize_taa_marbuta=normalize_taa_marbuta,
+        normalize_alef_maqsura=normalize_alef_maqsura,
+        remove_diacritics=remove_diacritics,
+        clean_punctuation=clean_punctuation,
+        strip_non_arabic=strip_non_arabic,
+    )
+    return processor(text)
+
+
 class ArabicPostProcessor:
 
     def __init__(

@@ -17,6 +17,7 @@ def main():
     parser.add_argument("--tokenizer",type=str,default=None)
     parser.add_argument("--show_samples",type=int,default=5)
     parser.add_argument("--max-length",type=int,default=None)
+    parser.add_argument("--beam-size",type=int,default=None)
     parser.add_argument("--no_postprocess",action="store_true")
     args = parser.parse_args()
     checkpoint = torch.load(args.checkpoint, map_location="cpu")
@@ -37,8 +38,9 @@ def main():
     tokenizer_path = args.tokenizer or os.path.join(
         os.path.dirname(args.checkpoint), "tokenizer.json"
     )
+    tokenizer_cfg = config.get("tokenizer", {}).get("normalization", {})
     if os.path.exists(tokenizer_path):
-        tokenizer = ArabicCharTokenizer()
+        tokenizer = ArabicCharTokenizer(**tokenizer_cfg)
         tokenizer.load(tokenizer_path)
         print(f"Loaded tokenizer from {tokenizer_path}")
     else:
@@ -110,17 +112,26 @@ def main():
     all_predictions = []     
     all_references = []
 
-    postprocessor = None if args.no_postprocess else ArabicPostProcessor()
+    postprocessor = None
+    if not args.no_postprocess:
+        postprocessor_cfg = dict(tokenizer_cfg)
+        postprocessor_cfg.update({
+            "fix_repetitions": False,
+            "clean_punctuation": False,
+        })
+        postprocessor = ArabicPostProcessor(**postprocessor_cfg)
     if postprocessor:
         print(f"  Postprocessing: {postprocessor.describe()}")
 
-    print(f"\nRunning inference (max_length={max_len})...")
+    beam_size = args.beam_size or config.get("evaluation", {}).get("beam_size", 1)
+
+    print(f"\nRunning inference (max_length={max_len}, beam_size={beam_size})...")
     with torch.no_grad():
         for batch in tqdm(val_loader, desc="Evaluating"):
             images = batch["images"].to(device)
             texts = batch["texts"] 
 
-            generated_ids = model.generate(images, max_length=max_len)
+            generated_ids = model.generate(images, max_length=max_len, beam_size=beam_size)
 
             for token_ids in generated_ids:
                 raw_text = tokenizer.decode(token_ids.tolist())
@@ -133,11 +144,13 @@ def main():
 
             all_references.extend(texts)
 
+    normalized_references = [postprocessor(text) for text in all_references] if postprocessor else all_references
+
     print(f"\nComputing metrics on {len(all_predictions)} samples...\n")
 
     if postprocessor:
-        raw_metrics = compute_metrics(all_raw_predictions, all_references)
-        pp_metrics = compute_metrics(all_predictions, all_references)
+        raw_metrics = compute_metrics(all_raw_predictions, normalized_references)
+        pp_metrics = compute_metrics(all_predictions, normalized_references)
 
         print("=" * 60)
         print("  WITHOUT postprocessing:")

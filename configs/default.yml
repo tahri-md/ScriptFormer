@@ -27,10 +27,10 @@ data:
   test_ratio: 0.1
 
   # Image dimensions after preprocessing
-  # Why 384x64? Width=384 captures a full text line, Height=64 is enough for Arabic script
+  # Width=1024 captures more of a handwritten line; Height=64 still keeps the vertical detail compact
   image:
     height: 64
-    width: 384
+    width: 1024
     channels: 1              # 1 = grayscale (manuscripts are B&W after binarization)
 
 # --- Preprocessing ---
@@ -62,6 +62,14 @@ tokenizer:
   sos_token: "<SOS>"         # Start-of-sequence — tells decoder to start generating
   eos_token: "<EOS>"         # End-of-sequence — tells decoder to stop
   unk_token: "<UNK>"         # Unknown — for characters not seen during training
+  normalization:
+    normalize_whitespace: true
+    normalize_alef: true
+    normalize_taa_marbuta: false
+    normalize_alef_maqsura: false
+    remove_diacritics: false
+    clean_punctuation: false
+    strip_non_arabic: false
 
 # --- Model ---
 model:
@@ -124,3 +132,4 @@ logging:
   log_dir: "logs"
   tensorboard: true          # Visualize training curves
   log_every: 50              # Log metrics every 50 steps
+  preview_samples: 2         # Show a couple of GT/prediction pairs after each validation pass

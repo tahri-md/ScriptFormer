@@ -188,14 +188,39 @@ class ScriptFormer(nn.Module):
         images: torch.Tensor,
         max_length: int = None,
         temperature: float = 1.0,
+        beam_size: int = 1,
     ) -> torch.Tensor:
         if max_length is None:
             max_length = self.max_length
+
+        if beam_size is None or beam_size < 1:
+            beam_size = 1
 
         B = images.shape[0]
         device = images.device
 
         encoder_output = self.encoder(images)
+
+        if beam_size > 1:
+            generated_sequences = [
+                self._generate_beam_search_single(
+                    encoder_output[i : i + 1],
+                    max_length=max_length,
+                    beam_size=beam_size,
+                )
+                for i in range(B)
+            ]
+            max_generated_length = max(sequence.size(0) for sequence in generated_sequences)
+            padded = torch.full(
+                (B, max_generated_length),
+                self.pad_id,
+                dtype=torch.long,
+                device=device,
+            )
+            for idx, sequence in enumerate(generated_sequences):
+                padded[idx, : sequence.size(0)] = sequence
+            return padded
+
         generated = torch.full((B, 1), self.sos_id, dtype=torch.long, device=device)
         finished = torch.zeros(B, dtype=torch.bool, device=device)
 
@@ -211,6 +236,61 @@ class ScriptFormer(nn.Module):
                 break
 
         return generated
+
+    def _generate_beam_search_single(
+        self,
+        encoder_output: torch.Tensor,
+        max_length: int,
+        beam_size: int,
+    ) -> torch.Tensor:
+        device = encoder_output.device
+        beams = [
+            {
+                "tokens": torch.tensor([self.sos_id], dtype=torch.long, device=device),
+                "score": 0.0,
+                "finished": False,
+            }
+        ]
+
+        for _ in range(max_length - 1):
+            candidates = []
+
+            for beam in beams:
+                if beam["finished"]:
+                    candidates.append(beam)
+                    continue
+
+                logits = self.decoder(encoder_output, beam["tokens"].unsqueeze(0))
+                next_logits = logits[:, -1, :]
+                log_probs = F.log_softmax(next_logits, dim=-1).squeeze(0)
+                top_scores, top_tokens = torch.topk(log_probs, k=min(beam_size, log_probs.size(-1)))
+
+                for score_delta, token_id in zip(top_scores.tolist(), top_tokens.tolist()):
+                    next_tokens = torch.cat(
+                        [beam["tokens"], torch.tensor([token_id], dtype=torch.long, device=device)]
+                    )
+                    candidates.append(
+                        {
+                            "tokens": next_tokens,
+                            "score": beam["score"] + score_delta,
+                            "finished": token_id == self.eos_id,
+                        }
+                    )
+
+            candidates.sort(
+                key=lambda item: item["score"] / max(1, item["tokens"].size(0) - 1),
+                reverse=True,
+            )
+            beams = candidates[:beam_size]
+
+            if all(beam["finished"] for beam in beams):
+                break
+
+        best_beam = max(
+            beams,
+            key=lambda item: item["score"] / max(1, item["tokens"].size(0) - 1),
+        )
+        return best_beam["tokens"]
 
     def count_parameters(self) -> dict:
         encoder_params = sum(p.numel() for p in self.encoder.parameters())

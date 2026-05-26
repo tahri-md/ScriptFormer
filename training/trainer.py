@@ -5,6 +5,9 @@ import torch
 import torch.nn as nn
 from pathlib import Path
 
+from evaluation import compute_metrics
+from postprocessing import ArabicPostProcessor
+
 
 class Trainer:
     def __init__(
@@ -59,11 +62,19 @@ class Trainer:
         self.log_every = config["logging"]["log_every"]
         self.log_dir = Path(config["logging"]["log_dir"])
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.preview_samples = config["logging"].get("preview_samples", 2)
+        self.beam_size = config.get("evaluation", {}).get("beam_size", 1)
+        self.preview_postprocessor = ArabicPostProcessor(
+            fix_repetitions=False,
+            clean_punctuation=False,
+        )
 
         self.history = {
             "train_loss": [],
             "val_loss": [],
             "learning_rates": [],
+            "val_preview_cer": [],
+            "val_preview_wer": [],
         }
 
         self.global_step = 0
@@ -86,12 +97,17 @@ class Trainer:
             epoch_start = time.time()
 
             train_loss = self._train_one_epoch(epoch)
-            val_loss = self._validate(epoch)
+            val_loss, preview_metrics = self._validate(epoch)
 
             current_lr = self.optimizer.param_groups[0]["lr"]
             self.history["train_loss"].append(train_loss)
             self.history["val_loss"].append(val_loss)
             self.history["learning_rates"].append(current_lr)
+            if preview_metrics is not None:
+                self.history["val_preview_cer"].append(preview_metrics["cer"])
+                self.history["val_preview_wer"].append(preview_metrics["wer"])
+            else:
+                preview_metrics = {"cer": 0.0, "wer": 0.0}
 
             epoch_time = time.time() - epoch_start
 
@@ -99,6 +115,8 @@ class Trainer:
                 f"Epoch {epoch:3d}/{self.epochs} | "
                 f"Train Loss: {train_loss:.4f} | "
                 f"Val Loss: {val_loss:.4f} | "
+                f"Preview CER: {preview_metrics['cer']:.4f} | "
+                f"Preview WER: {preview_metrics['wer']:.4f} | "
                 f"LR: {current_lr:.2e} | "
                 f"Time: {epoch_time:.1f}s"
             )
@@ -178,7 +196,7 @@ class Trainer:
         return total_loss / max(1, num_batches)
 
     @torch.no_grad()
-    def _validate(self, epoch: int) -> float:
+    def _validate(self, epoch: int) -> tuple[float, dict | None]:
         self.model.eval()
         total_loss = 0.0
         num_batches = 0
@@ -200,7 +218,40 @@ class Trainer:
             total_loss += loss.item()
             num_batches += 1
 
-        return total_loss / max(1, num_batches)
+        preview_metrics = self._preview_validation_batch(epoch)
+        return total_loss / max(1, num_batches), preview_metrics
+
+    @torch.no_grad()
+    def _preview_validation_batch(self, epoch: int) -> dict | None:
+        try:
+            batch = next(iter(self.val_loader))
+        except StopIteration:
+            return None
+
+        images = batch["images"].to(self.device)
+        references = batch["texts"][: self.preview_samples]
+        images = images[: len(references)]
+
+        generated_ids = self.model.generate(
+            images,
+            max_length=self.config["model"]["decoder"]["max_length"],
+            beam_size=self.beam_size,
+        )
+
+        predictions = [self.tokenizer.decode(token_ids.tolist()) for token_ids in generated_ids]
+        normalized_predictions = [self.preview_postprocessor(text) for text in predictions]
+        normalized_references = [self.preview_postprocessor(text) for text in references]
+
+        metrics = compute_metrics(normalized_predictions, normalized_references)
+
+        print(f"  [Epoch {epoch}] Validation preview (beam={self.beam_size}):")
+        for idx, (reference, prediction) in enumerate(zip(normalized_references, normalized_predictions), start=1):
+            print(f"    [{idx}] GT : {reference}")
+            print(f"        PR : {prediction}")
+
+        print(f"    Preview CER: {metrics['cer']:.4f} | Preview WER: {metrics['wer']:.4f}")
+
+        return metrics
 
     def _save_checkpoint(self, epoch: int, val_loss: float, is_best: bool = False):
         checkpoint = {
