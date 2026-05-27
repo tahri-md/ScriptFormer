@@ -4,13 +4,13 @@ import torch.nn.functional as F
 import math
 
 class ConvBlock(nn.Module):
-    def __init__(self,in_channels:int,out_channels:int):
+    def __init__(self,in_channels:int,out_channels:int,pool_kernel_size:int | tuple[int, int] = 2):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels,out_channels,kernel_size=3,padding=1)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.conv2 = nn.Conv2d(out_channels,out_channels,kernel_size=3,padding=1)
         self.bn2 = nn.BatchNorm2d(out_channels)
-        self.pool = nn.MaxPool2d(kernel_size=2,stride=2)
+        self.pool = nn.MaxPool2d(kernel_size=pool_kernel_size,stride=pool_kernel_size)
 
     def forward(self,x:torch.Tensor)->torch.Tensor:
         x = F.relu(self.bn1(self.conv1(x)))
@@ -21,10 +21,10 @@ class ConvBlock(nn.Module):
 class CNNEncoder(nn.Module):
     def __init__(self,hidden_size:int = 256,dropout:float=0.1):
         super().__init__()
-        self.block1 = ConvBlock(1,32)
-        self.block2 = ConvBlock(32,64)
-        self.block3 = ConvBlock(64,128)
-        self.block4 = ConvBlock(128,256)
+        self.block1 = ConvBlock(1,32,pool_kernel_size=2)
+        self.block2 = ConvBlock(32,64,pool_kernel_size=2)
+        self.block3 = ConvBlock(64,128,pool_kernel_size=(2,1))
+        self.block4 = ConvBlock(128,256,pool_kernel_size=(2,1))
         self.projection = nn.Linear(256*4,hidden_size)
         self.dropout = nn.Dropout(dropout)
         self.norm = nn.LayerNorm(hidden_size)

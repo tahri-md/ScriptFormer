@@ -10,6 +10,27 @@ from evaluation import compute_metrics, print_evaluation_report
 from postprocessing import ArabicPostProcessor
 from tqdm import tqdm
 
+
+def _resize_vocab_tensor(tensor: torch.Tensor, target_vocab_size: int) -> torch.Tensor:
+    """Resize a vocab-shaped tensor by copying overlapping rows and zero-filling new rows."""
+    current_vocab_size = tensor.shape[0]
+    if current_vocab_size == target_vocab_size:
+        return tensor
+
+    if tensor.ndim == 2:
+        resized = tensor.new_zeros((target_vocab_size, tensor.shape[1]))
+        copy_rows = min(current_vocab_size, target_vocab_size)
+        resized[:copy_rows] = tensor[:copy_rows]
+        return resized
+
+    if tensor.ndim == 1:
+        resized = tensor.new_zeros((target_vocab_size,))
+        copy_rows = min(current_vocab_size, target_vocab_size)
+        resized[:copy_rows] = tensor[:copy_rows]
+        return resized
+
+    raise ValueError(f"Expected 1D or 2D vocab tensor, got shape {tuple(tensor.shape)}")
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config",type=str,default="configs/default.yaml")
@@ -77,7 +98,30 @@ def main():
         sos_id=tokenizer.sos_id,
         eos_id=tokenizer.eos_id,
     )
-    model.load_state_dict(checkpoint["model_state_dict"])
+
+    checkpoint_vocab_size = state["decoder.token_embedding.weight"].shape[0]
+    tokenizer_vocab_size = tokenizer.vocab_size
+    state_to_load = dict(checkpoint["model_state_dict"])
+    if checkpoint_vocab_size != tokenizer_vocab_size:
+        print(
+            f"  Vocab mismatch detected (checkpoint={checkpoint_vocab_size}, "
+            f"tokenizer={tokenizer_vocab_size})."
+        )
+        print("  Resizing decoder vocab tensors to match tokenizer vocab size.")
+        state_to_load["decoder.token_embedding.weight"] = _resize_vocab_tensor(
+            state_to_load["decoder.token_embedding.weight"],
+            tokenizer_vocab_size,
+        )
+        state_to_load["decoder.output_projection.weight"] = _resize_vocab_tensor(
+            state_to_load["decoder.output_projection.weight"],
+            tokenizer_vocab_size,
+        )
+        state_to_load["decoder.output_projection.bias"] = _resize_vocab_tensor(
+            state_to_load["decoder.output_projection.bias"],
+            tokenizer_vocab_size,
+        )
+
+    model.load_state_dict(state_to_load)
     model = model.to(device)
     model.eval()
     print(f"  Loaded epoch {checkpoint['epoch']}, val_loss={checkpoint['val_loss']:.4f}")
