@@ -9,3 +9,4 @@ checkpoints/
 *.pth
 *.bin
 *.ckpt
+scriptformer-kaggle(1).ipynb
