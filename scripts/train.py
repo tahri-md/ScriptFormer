@@ -31,6 +31,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--resume", type=str, default=None)
+    parser.add_argument("--debug-shapes", action="store_true")
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
@@ -100,6 +101,7 @@ def main():
         pad_id=tokenizer.pad_id,
         sos_id=tokenizer.sos_id,
         eos_id=tokenizer.eos_id,
+        debug_shapes=args.debug_shapes,
     )
 
     trainer = Trainer(

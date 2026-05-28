@@ -19,7 +19,7 @@ class ConvBlock(nn.Module):
         return x
 
 class CNNEncoder(nn.Module):
-    def __init__(self,hidden_size:int = 256,dropout:float=0.1):
+    def __init__(self,hidden_size:int = 256,dropout:float=0.1,debug_shapes:bool=False):
         super().__init__()
         self.block1 = ConvBlock(1,32,pool_kernel_size=2)
         self.block2 = ConvBlock(32,64,pool_kernel_size=2)
@@ -28,12 +28,16 @@ class CNNEncoder(nn.Module):
         self.projection = nn.Linear(256*4,hidden_size)
         self.dropout = nn.Dropout(dropout)
         self.norm = nn.LayerNorm(hidden_size)
+        self.debug_shapes = debug_shapes
 
     def forward(self,images:torch.Tensor)->torch.Tensor:
         x = self.block1(images)
         x = self.block2(x)
         x = self.block3(x)
         x = self.block4(x)
+
+        if self.debug_shapes:
+            print(x.shape)
 
         B,C,H,W = x.shape
         x = x.permute(0,3,1,2)
@@ -150,6 +154,7 @@ class ScriptFormer(nn.Module):
         pad_id: int = 0,
         sos_id: int = 1,
         eos_id: int = 2,
+        debug_shapes: bool = False,
     ):
         super().__init__()
         self.sos_id = sos_id
@@ -160,6 +165,7 @@ class ScriptFormer(nn.Module):
         self.encoder = CNNEncoder(
             hidden_size=encoder_hidden,
             dropout=dropout,
+            debug_shapes=debug_shapes,
         )
 
         self.decoder = TransfomerDecoder(
