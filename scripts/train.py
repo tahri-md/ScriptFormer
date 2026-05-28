@@ -26,7 +26,7 @@ def set_seed(seed: int):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="configs/default.yaml")
+    parser.add_argument("--config", type=str, default="configs/default.yml")
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--lr", type=float, default=None)
@@ -51,10 +51,11 @@ def main():
     train_samples = data["train"]
     val_samples = data["val"]
 
-    tokenizer_cfg = config.get("tokenizer", {}).get("normalization", {})
+    tokenizer_cfg = dict(config.get("tokenizer", {}).get("normalization", {}))
+    tokenizer_cfg["normalize_alef"] = False
     tokenizer = ArabicCharTokenizer(**tokenizer_cfg)
-    all_texts = [s["text"] for s in train_samples + val_samples]
-    tokenizer.build_vocab(all_texts)
+    train_texts = [sample["text"] for sample in train_samples]
+    tokenizer.build_vocab(train_texts)
 
     tokenizer_path = os.path.join(config["training"]["checkpoint_dir"], "tokenizer.json")
     os.makedirs(config["training"]["checkpoint_dir"], exist_ok=True)

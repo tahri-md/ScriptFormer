@@ -11,7 +11,7 @@ class ArabicCharTokenizer:
         eos_token: str = "<EOS>",
         unk_token: str = "<UNK>",
         normalize_whitespace: bool = True,
-        normalize_alef: bool = True,
+        normalize_alef: bool = False,
         normalize_taa_marbuta: bool = False,
         normalize_alef_maqsura: bool = False,
         remove_diacritics: bool = False,
@@ -51,7 +51,7 @@ class ArabicCharTokenizer:
     def build_vocab(self,texts:list[str]) :
        all_charts = set()
        for text in texts:
-           all_charts.update(self._normalize_text(text))
+           all_charts.update(text)
         
        sorted_charts = sorted(all_charts)
        self.id_to_char = {}

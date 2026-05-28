@@ -33,7 +33,7 @@ def _resize_vocab_tensor(tensor: torch.Tensor, target_vocab_size: int) -> torch.
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config",type=str,default="configs/default.yaml")
+    parser.add_argument("--config",type=str,default="configs/default.yml")
     parser.add_argument("--checkpoint",type=str,default="checkpoint/best_model.pt")
     parser.add_argument("--tokenizer",type=str,default=None)
     parser.add_argument("--show_samples",type=int,default=5)
@@ -59,7 +59,8 @@ def main():
     tokenizer_path = args.tokenizer or os.path.join(
         os.path.dirname(args.checkpoint), "tokenizer.json"
     )
-    tokenizer_cfg = config.get("tokenizer", {}).get("normalization", {})
+    tokenizer_cfg = dict(config.get("tokenizer", {}).get("normalization", {}))
+    tokenizer_cfg["normalize_alef"] = False
     if os.path.exists(tokenizer_path):
         tokenizer = ArabicCharTokenizer(**tokenizer_cfg)
         tokenizer.load(tokenizer_path)
@@ -162,6 +163,7 @@ def main():
         postprocessor_cfg.update({
             "fix_repetitions": False,
             "clean_punctuation": False,
+            "normalize_alef": False,
         })
         postprocessor = ArabicPostProcessor(**postprocessor_cfg)
     if postprocessor:

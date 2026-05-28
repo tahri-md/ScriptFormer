@@ -64,7 +64,7 @@ tokenizer:
   unk_token: "<UNK>"         # Unknown — for characters not seen during training
   normalization:
     normalize_whitespace: true
-    normalize_alef: true
+    normalize_alef: false
     normalize_taa_marbuta: false
     normalize_alef_maqsura: false
     remove_diacritics: false
