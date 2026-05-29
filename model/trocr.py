@@ -62,19 +62,39 @@ class PositionalEncoding(nn.Module):
     def __init__(self,hidden_size:int,max_length:int=200,dropout:float = 0.1):
         super().__init__()
         self.dropout = nn.Dropout(dropout)
-        pe = torch.zeros(max_length,hidden_size)
+        self.hidden_size = hidden_size
+        self._build_pe(max_length)
+
+    def _build_pe(self, max_length: int):
+        pe = torch.zeros(max_length, self.hidden_size)
         position = torch.arange(0, max_length).unsqueeze(1).float()
         div_term = torch.exp(
-                    torch.arange(0, hidden_size, 2).float() * (-math.log(10000.0) / hidden_size)
-                )
-        pe[:, 0::2] = torch.sin(position * div_term) 
-        pe[:, 1::2] = torch.cos(position * div_term) 
-
+            torch.arange(0, self.hidden_size, 2).float() * (-math.log(10000.0) / self.hidden_size)
+        )
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0)
+        # register as buffer so it moves with the module; allow replacement if extended
         self.register_buffer("pe", pe)
+
+    def _ensure_length(self, length: int, device: torch.device, dtype: torch.dtype):
+        cur_len = self.pe.size(1)
+        if length <= cur_len:
+            return
+        # grow to at least requested length, double for amortized growth
+        new_len = max(length, cur_len * 2)
+        self._build_pe(new_len)
+        # ensure buffer has right device/dtype when used
     
     def forward(self,x:torch.Tensor)->torch.Tensor:
-        x = x+self.pe[:,:x.size(1),:]
+        req_len = x.size(1)
+        # expand buffer if needed
+        if req_len > self.pe.size(1):
+            # build larger pe on CPU then move to module device via register_buffer
+            self._ensure_length(req_len, x.device, x.dtype)
+
+        pe = self.pe[:, :req_len, :].to(device=x.device, dtype=x.dtype)
+        x = x + pe
         return self.dropout(x)
 
 
@@ -98,6 +118,7 @@ class TransformerEncoderBlock(nn.Module):
             batch_first=True,
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        # allocate a reasonably large positional buffer but allow dynamic growth
         self.positional_encoding = PositionalEncoding(hidden_size, max_length=2048, dropout=dropout)
 
     def forward(self, x: torch.Tensor, src_key_padding_mask: torch.Tensor = None) -> torch.Tensor:
