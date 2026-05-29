@@ -134,6 +134,7 @@ class ArabicPostProcessor:
         return text.replace("\u0649", "\u064A")
 
     def _clean_punctuation(self, text: str) -> str:
+        text = re.sub(r"[‐‑‒–—―−]", " ", text)
         punct = r"[\.،؛؟!:,;?]"
         text = re.sub(r"\s+(" + punct + r")", r"\1", text)
         text = re.sub(r"(" + punct + r")(\S)", r"\1 \2", text)

@@ -1,6 +1,7 @@
 import cv2
 import torch
 import numpy as np
+import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from preprocessing import ManuscriptPreprocessor
 from .tokenizer import ArabicCharTokenizer
@@ -12,7 +13,7 @@ class ArabicOCRDataset(Dataset):
         tokenizer: ArabicCharTokenizer,
         preprocessor: ManuscriptPreprocessor,
         image_height: int = 64,
-        image_width: int = 1024,
+        image_width: int = 1536,
         max_length: int = 128,
     ):
         self.samples = samples
@@ -45,7 +46,15 @@ class ArabicOCRDataset(Dataset):
 
 def collate_fn(batch:list,pad_id:int = 0) ->dict :
     images,token_seqs,texts = zip(*batch)
-    images = torch.stack(images,dim=0)
+    max_width = max(image.shape[-1] for image in images)
+    padded_images = []
+    for image in images:
+        pad_width = max_width - image.shape[-1]
+        if pad_width > 0:
+            image = F.pad(image, (0, pad_width, 0, 0))
+        padded_images.append(image)
+
+    images = torch.stack(padded_images,dim=0)
     max_len =max(seq.shape[0] for seq in token_seqs)
     padded_tokens = []
     attention_masks = []

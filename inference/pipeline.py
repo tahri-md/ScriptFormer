@@ -42,7 +42,7 @@ class OCRPipeline:
         postprocessor: ArabicPostProcessor = None,
         device: str = "cpu",
         image_height: int = 64,
-        image_width: int = 1024,
+        image_width: int = 1536,
         max_length: int = 128,
         beam_size: int = 1,
     ):

@@ -22,7 +22,7 @@ class CNNEncoder(nn.Module):
     def __init__(self,hidden_size:int = 256,dropout:float=0.1,debug_shapes:bool=False):
         super().__init__()
         self.block1 = ConvBlock(1,32,pool_kernel_size=2)
-        self.block2 = ConvBlock(32,64,pool_kernel_size=2)
+        self.block2 = ConvBlock(32,64,pool_kernel_size=(2,1))
         self.block3 = ConvBlock(64,128,pool_kernel_size=(2,1))
         self.block4 = ConvBlock(128,256,pool_kernel_size=(2,1))
         self.projection = nn.Linear(256*4,hidden_size)
@@ -47,9 +47,6 @@ class CNNEncoder(nn.Module):
         x = self.block2(x)
         x = self.block3(x)
         x = self.block4(x)
-
-        if self.debug_shapes:
-            print(x.shape)
 
         B,C,H,W = x.shape
         x = x.permute(0,3,1,2)
@@ -101,7 +98,7 @@ class TransformerEncoderBlock(nn.Module):
             batch_first=True,
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-        self.positional_encoding = PositionalEncoding(hidden_size, max_length=1024, dropout=dropout)
+        self.positional_encoding = PositionalEncoding(hidden_size, max_length=2048, dropout=dropout)
 
     def forward(self, x: torch.Tensor, src_key_padding_mask: torch.Tensor = None) -> torch.Tensor:
         if self.encoder is None:

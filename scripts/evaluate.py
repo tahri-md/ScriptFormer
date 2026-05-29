@@ -60,7 +60,6 @@ def main():
         os.path.dirname(args.checkpoint), "tokenizer.json"
     )
     tokenizer_cfg = dict(config.get("tokenizer", {}).get("normalization", {}))
-    tokenizer_cfg["normalize_alef"] = False
     if os.path.exists(tokenizer_path):
         tokenizer = ArabicCharTokenizer(**tokenizer_cfg)
         tokenizer.load(tokenizer_path)

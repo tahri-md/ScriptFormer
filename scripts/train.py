@@ -52,7 +52,6 @@ def main():
     val_samples = data["val"]
 
     tokenizer_cfg = dict(config.get("tokenizer", {}).get("normalization", {}))
-    tokenizer_cfg["normalize_alef"] = False
     tokenizer = ArabicCharTokenizer(**tokenizer_cfg)
     train_texts = [sample["text"] for sample in train_samples]
     tokenizer.build_vocab(train_texts)

@@ -51,7 +51,7 @@ class ArabicCharTokenizer:
     def build_vocab(self,texts:list[str]) :
        all_charts = set()
        for text in texts:
-           all_charts.update(text)
+           all_charts.update(self._normalize_text(text))
         
        sorted_charts = sorted(all_charts)
        self.id_to_char = {}

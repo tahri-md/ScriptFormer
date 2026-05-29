@@ -27,10 +27,10 @@ data:
   test_ratio: 0.1
 
   # Image dimensions after preprocessing
-  # Width=1024 captures more of a handwritten line; Height=64 still keeps the vertical detail compact
+  # Wider lines are preserved by aspect-ratio resize plus padding instead of squeezing long lines into 1024 px.
   image:
     height: 64
-    width: 1024
+    width: 1536
     channels: 1              # 1 = grayscale (manuscripts are B&W after binarization)
 
 # --- Preprocessing ---
@@ -64,11 +64,11 @@ tokenizer:
   unk_token: "<UNK>"         # Unknown — for characters not seen during training
   normalization:
     normalize_whitespace: true
-    normalize_alef: false
+    normalize_alef: true
     normalize_taa_marbuta: false
-    normalize_alef_maqsura: false
-    remove_diacritics: false
-    clean_punctuation: false
+    normalize_alef_maqsura: true
+    remove_diacritics: true
+    clean_punctuation: true
     strip_non_arabic: false
 
 # --- Model ---
@@ -90,7 +90,7 @@ model:
   decoder:
     type: "transformer"
     hidden_size: 256         # Smaller than encoder (text is simpler than images)
-    num_layers: 4            # Fewer layers reduce language-prior dominance
+    num_layers: 6            # Restored deeper decoder for stronger sequence modeling
     num_heads: 8             # 8 attention heads (256/8 = 32 dim per head)
     feedforward_size: 1024   # FFN intermediate size (usually 4x hidden_size)
     dropout: 0.1
@@ -135,7 +135,7 @@ evaluation:
   metrics:
     - "cer"                  # Character Error Rate (primary metric for OCR)
     - "wer"                  # Word Error Rate
-  beam_size: 1               # Greedy decoding is less likely to amplify memorized phrases
+  beam_size: 5               # Wider beam helps stabilize uncertain Arabic OCR decoding
 
 # --- Logging ---
 logging:

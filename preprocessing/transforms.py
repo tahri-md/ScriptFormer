@@ -49,15 +49,14 @@ def denoise(image: np.ndarray, method: str = "morphological", **kwargs) -> np.nd
         raise ValueError(f"Unknown denoising method: {method}")
     return methods[method](image, **kwargs)
 
-def resize_and_pad(image:np.ndarray,target_height:int=64,target_width:int=1024):
+def resize_and_pad(image:np.ndarray,target_height:int=64,target_width:int=1536):
     h,w = image.shape[:2]
     scale = target_height / h
-    new_width = int(w* scale)
-    if new_width > target_width:
-        resized = cv2.resize(image,(target_width,target_height),interpolation=cv2.INTER_AREA)
-    else :
-        resized = cv2.resize(image,(new_width,target_height),interpolation=cv2.INTER_AREA)
+    new_width = max(1, int(round(w * scale)))
 
+    resized = cv2.resize(image,(new_width,target_height),interpolation=cv2.INTER_AREA)
+
+    if new_width < target_width:
         pad_width = target_width - new_width
         resized = cv2.copyMakeBorder(
                 resized,
@@ -66,6 +65,7 @@ def resize_and_pad(image:np.ndarray,target_height:int=64,target_width:int=1024):
                 borderType=cv2.BORDER_CONSTANT,
                 value=0
             )
+
     return resized
 
 def normalize(image:np.ndarray)->np.ndarray:
@@ -84,7 +84,7 @@ class ManuscriptPreprocessor:
         self.denoise_method = config.get("denoising", {}).get("method", "morphological")
         self.denoise_kernel = config.get("denoising", {}).get("kernel_size", 3)
 
-    def __call__(self, image: np.ndarray, target_height: int = 64, target_width: int = 1024) -> np.ndarray:
+    def __call__(self, image: np.ndarray, target_height: int = 64, target_width: int = 1536) -> np.ndarray:
         img = to_grayscale(image)
         # binarize expects image first, then method, then kwargs
         img = binarize(self.bin_method, img, window_size=self.bin_window, k=self.bin_k)
