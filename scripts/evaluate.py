@@ -125,6 +125,43 @@ def main():
             tokenizer_vocab_size,
         )
 
+    # Handle potential positional-encoding buffer size mismatches between
+    # checkpoint and current model (e.g., checkpoint has larger/smaller PE).
+    for k in list(state_to_load.keys()):
+        if k.endswith("positional_encoding.pe") or k.endswith("positional_encoding.pe.weight"):
+            try:
+                src = state_to_load[k]
+                # locate target buffer on model by walking attribute path (drop the final 'pe')
+                parts = k.split('.')[:-1]
+                target = model
+                for p in parts:
+                    if hasattr(target, p):
+                        target = getattr(target, p)
+                    else:
+                        target = None
+                        break
+                if target is None or not hasattr(target, 'pe'):
+                    continue
+                tgt = target.pe
+                # src and tgt should be tensors with shape [1, seq_len, hidden]
+                if not hasattr(src, 'shape') or src.ndim != tgt.ndim:
+                    continue
+                src_len = src.shape[1]
+                tgt_len = tgt.shape[1]
+                if src_len == tgt_len:
+                    continue
+                print(f"  Adjusting checkpoint positional-encoding '{k}': {src_len} -> {tgt_len}")
+                if src_len > tgt_len:
+                    state_to_load[k] = src[:, :tgt_len, :].clone()
+                else:
+                    # pad with zeros
+                    new = src.new_zeros((src.shape[0], tgt_len, src.shape[2]))
+                    new[:, :src_len, :] = src
+                    state_to_load[k] = new
+            except Exception:
+                # If any unexpected issue occurs, skip adjustment and let load_state_dict report it
+                continue
+
     loaded = model.load_state_dict(state_to_load, strict=False)
     if loaded.missing_keys:
         print(f"  Warning: missing model keys in checkpoint: {loaded.missing_keys}")
