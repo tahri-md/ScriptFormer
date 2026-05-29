@@ -1,0 +1,9 @@
+{
+  "vocab_size": 67,
+  "special_tokens": [
+    "<PAD>",
+    "<SOS>",
+    "<EOS>",
+    "<UNK>"
+  ]
+}
