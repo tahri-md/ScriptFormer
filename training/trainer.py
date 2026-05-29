@@ -281,7 +281,13 @@ class Trainer:
         print(f"Loading checkpoint from {checkpoint_path}...")
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
 
-        self.model.load_state_dict(checkpoint["model_state_dict"])
+        # Load model state permissively so older checkpoints without the
+        # optional encoder transformer still load. Report any missing keys.
+        loaded = self.model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+        if loaded.missing_keys:
+            print(f"  Warning: missing model keys in checkpoint: {loaded.missing_keys}")
+        if loaded.unexpected_keys:
+            print(f"  Warning: unexpected keys in checkpoint: {loaded.unexpected_keys}")
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
 

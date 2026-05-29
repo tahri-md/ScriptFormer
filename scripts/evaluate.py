@@ -98,6 +98,10 @@ def main():
         pad_id=tokenizer.pad_id,
         sos_id=tokenizer.sos_id,
         eos_id=tokenizer.eos_id,
+        encoder_transformer_layers=config.get("model", {}).get("encoder_context", {}).get("num_layers", 0),
+        encoder_transformer_heads=config.get("model", {}).get("encoder_context", {}).get("num_heads", 8),
+        encoder_transformer_ff=config.get("model", {}).get("encoder_context", {}).get("feedforward_size", 512),
+        encoder_transformer_dropout=config.get("model", {}).get("encoder_context", {}).get("dropout", 0.1),
     )
 
     checkpoint_vocab_size = state["decoder.token_embedding.weight"].shape[0]
@@ -122,7 +126,11 @@ def main():
             tokenizer_vocab_size,
         )
 
-    model.load_state_dict(state_to_load)
+    loaded = model.load_state_dict(state_to_load, strict=False)
+    if loaded.missing_keys:
+        print(f"  Warning: missing model keys in checkpoint: {loaded.missing_keys}")
+    if loaded.unexpected_keys:
+        print(f"  Warning: unexpected keys in checkpoint: {loaded.unexpected_keys}")
     model = model.to(device)
     model.eval()
     print(f"  Loaded epoch {checkpoint['epoch']}, val_loss={checkpoint['val_loss']:.4f}")

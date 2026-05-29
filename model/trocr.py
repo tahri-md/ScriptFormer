@@ -79,6 +79,35 @@ class PositionalEncoding(nn.Module):
     def forward(self,x:torch.Tensor)->torch.Tensor:
         x = x+self.pe[:,:x.size(1),:]
         return self.dropout(x)
+
+
+class TransformerEncoderBlock(nn.Module):
+    """Optional Transformer encoder applied to visual feature sequences.
+
+    Uses batch_first=True to accept (B, S, E) tensors so it plugs into our CNN output.
+    """
+    def __init__(self, hidden_size: int, num_layers: int = 2, num_heads: int = 8, feedforward_size: int = 512, dropout: float = 0.1):
+        super().__init__()
+        if num_layers <= 0:
+            self.encoder = None
+            return
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=hidden_size,
+            nhead=num_heads,
+            dim_feedforward=feedforward_size,
+            dropout=dropout,
+            activation="relu",
+            batch_first=True,
+        )
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.positional_encoding = PositionalEncoding(hidden_size, max_length=1024, dropout=dropout)
+
+    def forward(self, x: torch.Tensor, src_key_padding_mask: torch.Tensor = None) -> torch.Tensor:
+        if self.encoder is None:
+            return x
+        x = self.positional_encoding(x)
+        return self.encoder(x, src_key_padding_mask=src_key_padding_mask)
     
 class TransfomerDecoder(nn.Module):
     def __init__(
@@ -168,6 +197,11 @@ class ScriptFormer(nn.Module):
         sos_id: int = 1,
         eos_id: int = 2,
         debug_shapes: bool = False,
+        # Optional transformer applied to encoder outputs (visual contextualization)
+        encoder_transformer_layers: int = 0,
+        encoder_transformer_heads: int = 8,
+        encoder_transformer_ff: int = 512,
+        encoder_transformer_dropout: float = 0.1,
     ):
         super().__init__()
         self.sos_id = sos_id
@@ -180,6 +214,18 @@ class ScriptFormer(nn.Module):
             dropout=dropout,
             debug_shapes=debug_shapes,
         )
+
+        # optional encoder-side transformer for stronger visual grounding
+        if encoder_transformer_layers and encoder_transformer_layers > 0:
+            self.encoder_transformer = TransformerEncoderBlock(
+                hidden_size=encoder_hidden,
+                num_layers=encoder_transformer_layers,
+                num_heads=encoder_transformer_heads,
+                feedforward_size=encoder_transformer_ff,
+                dropout=encoder_transformer_dropout,
+            )
+        else:
+            self.encoder_transformer = None
 
         self.decoder = TransfomerDecoder(
             vocab_size=vocab_size,
@@ -198,6 +244,8 @@ class ScriptFormer(nn.Module):
         target_ids: torch.Tensor,
     ) -> torch.Tensor:
         encoder_output = self.encoder(images)
+        if self.encoder_transformer is not None:
+            encoder_output = self.encoder_transformer(encoder_output)
         logits = self.decoder(encoder_output, target_ids)
         return logits
 

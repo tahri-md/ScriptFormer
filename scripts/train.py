@@ -103,6 +103,10 @@ def main():
         sos_id=tokenizer.sos_id,
         eos_id=tokenizer.eos_id,
         debug_shapes=args.debug_shapes,
+        encoder_transformer_layers=config.get("model", {}).get("encoder_context", {}).get("num_layers", 0),
+        encoder_transformer_heads=config.get("model", {}).get("encoder_context", {}).get("num_heads", 8),
+        encoder_transformer_ff=config.get("model", {}).get("encoder_context", {}).get("feedforward_size", 512),
+        encoder_transformer_dropout=config.get("model", {}).get("encoder_context", {}).get("dropout", 0.1),
     )
 
     trainer = Trainer(
