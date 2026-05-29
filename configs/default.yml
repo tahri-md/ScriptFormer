@@ -90,7 +90,7 @@ model:
   decoder:
     type: "transformer"
     hidden_size: 256         # Smaller than encoder (text is simpler than images)
-    num_layers: 6            # 6 decoder layers
+    num_layers: 4            # Fewer layers reduce language-prior dominance
     num_heads: 8             # 8 attention heads (256/8 = 32 dim per head)
     feedforward_size: 1024   # FFN intermediate size (usually 4x hidden_size)
     dropout: 0.1
@@ -102,6 +102,7 @@ training:
   batch_size: 16             # Reduce to 4-8 if you run out of memory
   learning_rate: 0.0001      # 1e-4, standard for fine-tuning transformers
   weight_decay: 0.01         # L2 regularization (prevents overfitting)
+  label_smoothing: 0.1       # Reduces overconfident memorization
   warmup_steps: 500          # LR slowly increases for first 500 steps (stabilizes training)
   max_grad_norm: 1.0         # Gradient clipping (prevents exploding gradients)
 
@@ -124,7 +125,7 @@ evaluation:
   metrics:
     - "cer"                  # Character Error Rate (primary metric for OCR)
     - "wer"                  # Word Error Rate
-  beam_size: 5               # Beam search width during inference (higher = better but slower)
+  beam_size: 1               # Greedy decoding is less likely to amplify memorized phrases
 
 # --- Logging ---
 logging:

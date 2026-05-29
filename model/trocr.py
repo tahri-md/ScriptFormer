@@ -28,7 +28,19 @@ class CNNEncoder(nn.Module):
         self.projection = nn.Linear(256*4,hidden_size)
         self.dropout = nn.Dropout(dropout)
         self.norm = nn.LayerNorm(hidden_size)
+        self.context_blend = 0.5
+        self.context_kernel = torch.tensor([0.25, 0.5, 0.25], dtype=torch.float32).view(1, 1, 3)
         self.debug_shapes = debug_shapes
+
+    def _mix_sequence_context(self, x: torch.Tensor) -> torch.Tensor:
+        if x.size(1) < 3:
+            return x
+
+        sequence = x.transpose(1, 2)
+        kernel = self.context_kernel.to(device=sequence.device, dtype=sequence.dtype).expand(sequence.size(1), -1, -1)
+        context = F.conv1d(sequence, kernel, padding=1, groups=sequence.size(1))
+        context = context.transpose(1, 2)
+        return (1.0 - self.context_blend) * x + self.context_blend * context
 
     def forward(self,images:torch.Tensor)->torch.Tensor:
         x = self.block1(images)
@@ -43,6 +55,7 @@ class CNNEncoder(nn.Module):
         x = x.permute(0,3,1,2)
         x = x.reshape(B,W,C*H)
         x = self.projection(x)
+        x = self._mix_sequence_context(x)
         x = self.dropout(x)
         x = self.norm(x)
 

@@ -31,7 +31,11 @@ class Trainer:
 
         self.model = self.model.to(self.device)
 
-        self.criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_id)
+        label_smoothing = train_cfg.get("label_smoothing", 0.1)
+        self.criterion = nn.CrossEntropyLoss(
+            ignore_index=tokenizer.pad_id,
+            label_smoothing=label_smoothing,
+        )
 
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(),
