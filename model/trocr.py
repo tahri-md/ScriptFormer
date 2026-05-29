@@ -254,6 +254,9 @@ class ScriptFormer(nn.Module):
         temperature: float = 1.0,
         beam_size: int = 1,
     ) -> torch.Tensor:
+        was_training = self.training
+        self.eval()
+
         if max_length is None:
             max_length = self.max_length
 
@@ -264,42 +267,48 @@ class ScriptFormer(nn.Module):
         device = images.device
 
         encoder_output = self.encoder(images)
+        if self.encoder_transformer is not None:
+            encoder_output = self.encoder_transformer(encoder_output)
 
-        if beam_size > 1:
-            generated_sequences = [
-                self._generate_beam_search_single(
-                    encoder_output[i : i + 1],
-                    max_length=max_length,
-                    beam_size=beam_size,
+        try:
+            if beam_size > 1:
+                generated_sequences = [
+                    self._generate_beam_search_single(
+                        encoder_output[i : i + 1],
+                        max_length=max_length,
+                        beam_size=beam_size,
+                    )
+                    for i in range(B)
+                ]
+                max_generated_length = max(sequence.size(0) for sequence in generated_sequences)
+                padded = torch.full(
+                    (B, max_generated_length),
+                    self.pad_id,
+                    dtype=torch.long,
+                    device=device,
                 )
-                for i in range(B)
-            ]
-            max_generated_length = max(sequence.size(0) for sequence in generated_sequences)
-            padded = torch.full(
-                (B, max_generated_length),
-                self.pad_id,
-                dtype=torch.long,
-                device=device,
-            )
-            for idx, sequence in enumerate(generated_sequences):
-                padded[idx, : sequence.size(0)] = sequence
-            return padded
+                for idx, sequence in enumerate(generated_sequences):
+                    padded[idx, : sequence.size(0)] = sequence
+                return padded
 
-        generated = torch.full((B, 1), self.sos_id, dtype=torch.long, device=device)
-        finished = torch.zeros(B, dtype=torch.bool, device=device)
+            generated = torch.full((B, 1), self.sos_id, dtype=torch.long, device=device)
+            finished = torch.zeros(B, dtype=torch.bool, device=device)
 
-        for _ in range(max_length - 1):
-            logits = self.decoder(encoder_output, generated)
-            next_logits = logits[:, -1, :] / temperature
-            next_token = next_logits.argmax(dim=-1)
-            next_token[finished] = self.pad_id
-            generated = torch.cat([generated, next_token.unsqueeze(1)], dim=1)
-            finished = finished | (next_token == self.eos_id)
+            for _ in range(max_length - 1):
+                logits = self.decoder(encoder_output, generated)
+                next_logits = logits[:, -1, :] / temperature
+                next_token = next_logits.argmax(dim=-1)
+                next_token[finished] = self.pad_id
+                generated = torch.cat([generated, next_token.unsqueeze(1)], dim=1)
+                finished = finished | (next_token == self.eos_id)
 
-            if finished.all():
-                break
+                if finished.all():
+                    break
 
-        return generated
+            return generated
+        finally:
+            if was_training:
+                self.train()
 
     def _generate_beam_search_single(
         self,
