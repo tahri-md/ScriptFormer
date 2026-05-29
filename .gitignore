@@ -10,3 +10,13 @@ checkpoints/
 *.bin
 *.ckpt
 scriptformer-kaggle(1).ipynb
+outputs/
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.html
+DEFAULT_YML_EXPLAINED.md
+PROJECT_FLOW.md
+Untitled.png
+engproc-112-00041-v2-1.pdf
