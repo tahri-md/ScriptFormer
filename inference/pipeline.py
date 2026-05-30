@@ -32,6 +32,21 @@ def _resize_vocab_tensor(tensor: torch.Tensor, target_vocab_size: int) -> torch.
     raise ValueError(f"Expected 1D or 2D vocab tensor, got shape {tuple(tensor.shape)}")
 
 
+def _resize_positional_encoding_tensor(tensor: torch.Tensor, target_seq_len: int) -> torch.Tensor:
+    """Resize a positional-encoding buffer to the requested sequence length."""
+    if tensor.ndim != 3:
+        raise ValueError(f"Expected 3D positional-encoding tensor, got shape {tuple(tensor.shape)}")
+
+    current_seq_len = tensor.shape[1]
+    if current_seq_len == target_seq_len:
+        return tensor
+
+    resized = tensor.new_zeros((tensor.shape[0], target_seq_len, tensor.shape[2]))
+    copy_len = min(current_seq_len, target_seq_len)
+    resized[:, :copy_len, :] = tensor[:, :copy_len, :]
+    return resized
+
+
 class OCRPipeline:
 
     def __init__(
@@ -148,6 +163,33 @@ class OCRPipeline:
                 state_to_load["decoder.output_projection.bias"],
                 tokenizer_vocab_size,
             )
+
+        for key in list(state_to_load.keys()):
+            if key.endswith("positional_encoding.pe") or key.endswith("positional_encoding.pe.weight"):
+                try:
+                    src = state_to_load[key]
+                    parts = key.split(".")[:-1]
+                    target = model
+                    for part in parts:
+                        target = getattr(target, part, None)
+                        if target is None:
+                            break
+                    if target is None or not hasattr(target, "pe"):
+                        continue
+
+                    target_pe = target.pe
+                    if not hasattr(src, "shape") or src.ndim != target_pe.ndim:
+                        continue
+
+                    if src.shape[1] != target_pe.shape[1]:
+                        print(
+                            f"Adjusting checkpoint positional-encoding '{key}': "
+                            f"{src.shape[1]} -> {target_pe.shape[1]}"
+                        )
+                        state_to_load[key] = _resize_positional_encoding_tensor(src, target_pe.shape[1])
+                except Exception:
+                    # Leave the original tensor in place if anything unexpected happens.
+                    continue
 
         loaded = model.load_state_dict(state_to_load, strict=False)
         if loaded.missing_keys:
