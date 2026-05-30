@@ -3,6 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
+try:
+    from torchvision.models import resnet18, resnet34, ResNet18_Weights, ResNet34_Weights
+except Exception:
+    resnet18 = None
+    resnet34 = None
+    ResNet18_Weights = None
+    ResNet34_Weights = None
+
 class ConvBlock(nn.Module):
     def __init__(self,in_channels:int,out_channels:int,pool_kernel_size:int | tuple[int, int] = 2):
         super().__init__()
@@ -56,6 +64,97 @@ class CNNEncoder(nn.Module):
         x = self.dropout(x)
         x = self.norm(x)
 
+        return x
+
+
+class ResNetEncoder(nn.Module):
+    def __init__(
+        self,
+        hidden_size: int = 256,
+        dropout: float = 0.1,
+        backbone_name: str = "resnet18",
+        pretrained: bool = True,
+        freeze_backbone: bool = False,
+    ):
+        super().__init__()
+        backbone_name = backbone_name.lower()
+        backbone, backbone_dim = self._build_backbone(backbone_name, pretrained=pretrained)
+
+        self.backbone_name = backbone_name
+        self.backbone = backbone
+        self.backbone_dim = backbone_dim
+        self.projection = nn.Linear(backbone_dim, hidden_size)
+        self.dropout = nn.Dropout(dropout)
+        self.norm = nn.LayerNorm(hidden_size)
+
+        if freeze_backbone:
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+
+    @staticmethod
+    def _build_backbone(backbone_name: str, pretrained: bool = True) -> tuple[nn.Module, int]:
+        if resnet18 is None or resnet34 is None:
+            raise ImportError(
+                "torchvision is required for the pretrained ResNet encoder. "
+                "Install torchvision or set model.encoder.type to 'cnn'."
+            )
+
+        if backbone_name == "resnet18":
+            constructor = resnet18
+            weights_enum = ResNet18_Weights
+            out_dim = 512
+        elif backbone_name == "resnet34":
+            constructor = resnet34
+            weights_enum = ResNet34_Weights
+            out_dim = 512
+        else:
+            raise ValueError(f"Unsupported ResNet backbone: {backbone_name}")
+
+        if pretrained:
+            if weights_enum is not None:
+                try:
+                    backbone = constructor(weights=weights_enum.DEFAULT)
+                except Exception:
+                    backbone = constructor(weights=None)
+            else:
+                try:
+                    backbone = constructor(pretrained=True)
+                except TypeError:
+                    backbone = constructor(weights=None)
+        else:
+            try:
+                backbone = constructor(weights=None)
+            except TypeError:
+                backbone = constructor(pretrained=False)
+
+        backbone.fc = nn.Identity()
+        backbone.avgpool = nn.Identity()
+        return backbone, out_dim
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        if images.size(1) == 1:
+            x = images.repeat(1, 3, 1, 1)
+        elif images.size(1) == 3:
+            x = images
+        else:
+            raise ValueError(f"ResNetEncoder expects 1 or 3 input channels, got {images.size(1)}")
+
+        x = self.backbone.conv1(x)
+        x = self.backbone.bn1(x)
+        x = self.backbone.relu(x)
+        x = self.backbone.maxpool(x)
+
+        x = self.backbone.layer1(x)
+        x = self.backbone.layer2(x)
+        x = self.backbone.layer3(x)
+        x = self.backbone.layer4(x)
+
+        B, C, H, W = x.shape
+        x = x.mean(dim=2)
+        x = x.permute(0, 2, 1)
+        x = self.projection(x)
+        x = self.dropout(x)
+        x = self.norm(x)
         return x
     
 class PositionalEncoding(nn.Module):
@@ -205,6 +304,9 @@ class ScriptFormer(nn.Module):
         self,
         vocab_size: int,
         encoder_hidden: int = 256,
+        encoder_type: str = "cnn",
+        encoder_pretrained: bool = False,
+        encoder_freeze_backbone: bool = False,
         decoder_hidden: int = 256,
         decoder_layers: int = 6,
         decoder_heads: int = 8,
@@ -227,11 +329,28 @@ class ScriptFormer(nn.Module):
         self.pad_id = pad_id
         self.max_length = max_length
 
-        self.encoder = CNNEncoder(
-            hidden_size=encoder_hidden,
-            dropout=dropout,
-            debug_shapes=debug_shapes,
-        )
+        encoder_type = (encoder_type or "cnn").lower()
+        if encoder_type == "cnn":
+            self.encoder = CNNEncoder(
+                hidden_size=encoder_hidden,
+                dropout=dropout,
+                debug_shapes=debug_shapes,
+            )
+        elif encoder_type in {"resnet18", "resnet34"}:
+            self.encoder = ResNetEncoder(
+                hidden_size=encoder_hidden,
+                dropout=dropout,
+                backbone_name=encoder_type,
+                pretrained=encoder_pretrained,
+                freeze_backbone=encoder_freeze_backbone,
+            )
+        else:
+            raise ValueError(
+                f"Unknown encoder_type={encoder_type!r}. Use 'cnn', 'resnet18', or 'resnet34'."
+            )
+        self.encoder_type = encoder_type
+        self.encoder_pretrained = encoder_pretrained
+        self.encoder_freeze_backbone = encoder_freeze_backbone
 
         # optional encoder-side transformer for stronger visual grounding
         if encoder_transformer_layers and encoder_transformer_layers > 0:

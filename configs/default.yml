@@ -73,16 +73,13 @@ tokenizer:
 
 # --- Model ---
 model:
-  # === ENCODER (Vision Transformer) ===
+  # === ENCODER (Pretrained visual backbone) ===
   # Takes an image → sequence of visual features
   encoder:
-    type: "vit"              # Vision Transformer
-    pretrained: true         # Start from pretrained weights (transfer learning)
-    pretrained_model: "google/vit-base-patch16-224"
-    patch_size: 16           # Image is split into 16x16 patches
-    hidden_size: 768         # Dimension of each patch's representation
-    num_layers: 12           # Number of transformer encoder layers
-    num_heads: 12            # Number of attention heads (768/12 = 64 dim per head)
+    type: "resnet18"         # "cnn", "resnet18", or "resnet34"
+    pretrained: true         # Use ImageNet pretrained weights for the visual backbone
+    freeze_backbone: false   # Set true to train only the projection + decoder first
+    hidden_size: 256         # Project visual features into the decoder dimension
     dropout: 0.1
 
   # === DECODER (Autoregressive Transformer) ===
@@ -97,7 +94,7 @@ model:
     max_length: 128          # Maximum output sequence length (chars)
 
   # === ENCODER CONTEXTUALIZER ===
-  # Small transformer applied to CNN-produced visual sequences to improve
+  # Small transformer applied to visual backbone sequences to improve
   # image-to-text alignment without replacing the full vision backbone.
   encoder_context:
     enabled: true

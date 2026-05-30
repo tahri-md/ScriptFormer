@@ -91,6 +91,9 @@ def main():
 
     model = ScriptFormer(
         vocab_size=tokenizer.vocab_size,
+        encoder_type=config.get("model", {}).get("encoder", {}).get("type", "cnn"),
+        encoder_pretrained=config.get("model", {}).get("encoder", {}).get("pretrained", False),
+        encoder_freeze_backbone=config.get("model", {}).get("encoder", {}).get("freeze_backbone", False),
         encoder_hidden=config["model"]["decoder"]["hidden_size"],
         decoder_hidden=config["model"]["decoder"]["hidden_size"],
         decoder_layers=config["model"]["decoder"]["num_layers"],
