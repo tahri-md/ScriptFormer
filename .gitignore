@@ -4,6 +4,7 @@ __pycache__/
 
 configs/
 data/raw/
+data/raw/ifnenit/
 checkpoints/
 *.pt
 *.pth
