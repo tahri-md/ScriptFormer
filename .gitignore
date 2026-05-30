@@ -3,7 +3,7 @@ __pycache__/
 .venv/
 
 configs/
-data/raw/KHATT/
+data/raw/
 checkpoints/
 *.pt
 *.pth
