@@ -1,0 +1,10 @@
+COM: IFN/ENIT-database truth (label) file
+COM: http://www.ifnenit.com
+COM: IfN, TU-BS
+COM: ae77_019.tif coming from pa382_8.tif
+X_Y: 548 138
+BDR: begin data record
+LBL: ZIP:2241;AW1:ÑÃÓ.ÇáÐøÑÇÚ;AW2:raA|aeA|seA|aaA|laB|dhEllL|raA|aaA|ayA|;QUA:YB1;ADD:P8
+CHA: 9
+BLN: 74,76
+EDR: end of data record

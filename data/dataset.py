@@ -13,7 +13,7 @@ class ArabicOCRDataset(Dataset):
         tokenizer: ArabicCharTokenizer,
         preprocessor: ManuscriptPreprocessor,
         image_height: int = 64,
-        image_width: int = 1536,
+        image_width: int = 2048,
         max_length: int = 128,
     ):
         self.samples = samples

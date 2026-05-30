@@ -105,6 +105,10 @@ class ArabicCharTokenizer:
     @property
     def eos_id(self) -> int:
         return self.char_to_id[self.eos_token]
+
+    @property
+    def unk_id(self) -> int:
+        return self.char_to_id[self.unk_token]
     
     def save(self,path:str)->None:
         data = {

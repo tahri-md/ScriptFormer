@@ -68,6 +68,7 @@ class Trainer:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.preview_samples = config["logging"].get("preview_samples", 2)
         self.beam_size = config.get("evaluation", {}).get("beam_size", 1)
+        self.decoder_input_noise_cfg = config.get("training", {}).get("decoder_input_noise", {})
         self.preview_postprocessor = ArabicPostProcessor(
             fix_repetitions=False,
             clean_punctuation=False,
@@ -169,6 +170,7 @@ class Trainer:
 
             decoder_input = token_ids[:, :-1]
             labels = token_ids[:, 1:]
+            decoder_input = self._maybe_corrupt_decoder_input(decoder_input)
 
             logits = self.model(images, decoder_input)
 
@@ -224,6 +226,36 @@ class Trainer:
 
         preview_metrics = self._preview_validation_batch(epoch)
         return total_loss / max(1, num_batches), preview_metrics
+
+    def _maybe_corrupt_decoder_input(self, decoder_input: torch.Tensor) -> torch.Tensor:
+        cfg = self.decoder_input_noise_cfg
+        if not cfg.get("enabled", False):
+            return decoder_input
+
+        probability = float(cfg.get("probability", 0.0))
+        if probability <= 0.0:
+            return decoder_input
+
+        replacement = cfg.get("replacement", "unk").lower()
+        if replacement not in {"unk", "drop"}:
+            replacement = "unk"
+
+        corrupted = decoder_input.clone()
+        special_ids = {self.tokenizer.pad_id, self.tokenizer.sos_id, self.tokenizer.eos_id}
+        valid_positions = torch.ones_like(corrupted, dtype=torch.bool)
+        for special_id in special_ids:
+            valid_positions &= corrupted != special_id
+
+        noise_mask = (torch.rand_like(corrupted.float()) < probability) & valid_positions
+        if not noise_mask.any():
+            return corrupted
+
+        if replacement == "drop":
+            corrupted[noise_mask] = self.tokenizer.pad_id
+        else:
+            corrupted[noise_mask] = self.tokenizer.unk_id
+
+        return corrupted
 
     @torch.no_grad()
     def _preview_validation_batch(self, epoch: int) -> dict | None:

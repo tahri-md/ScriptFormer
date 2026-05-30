@@ -34,7 +34,7 @@ data:
   # Wider lines are preserved by aspect-ratio resize plus padding instead of squeezing long lines into 1024 px.
   image:
     height: 64
-    width: 1536
+    width: 2048
     channels: 1              # 1 = grayscale (manuscripts are B&W after binarization)
 
 # --- Preprocessing ---
@@ -91,10 +91,10 @@ model:
   decoder:
     type: "transformer"
     hidden_size: 256         # Smaller than encoder (text is simpler than images)
-    num_layers: 6            # Restored deeper decoder for stronger sequence modeling
+    num_layers: 4            # Lighter decoder reduces pure language priors
     num_heads: 8             # 8 attention heads (256/8 = 32 dim per head)
     feedforward_size: 1024   # FFN intermediate size (usually 4x hidden_size)
-    dropout: 0.1
+    dropout: 0.15            # Slightly higher dropout weakens overconfident text guessing
     max_length: 128          # Maximum output sequence length (chars)
 
   # === ENCODER CONTEXTUALIZER ===
@@ -116,6 +116,12 @@ training:
   label_smoothing: 0.1       # Reduces overconfident memorization
   warmup_steps: 500          # LR slowly increases for first 500 steps (stabilizes training)
   max_grad_norm: 1.0         # Gradient clipping (prevents exploding gradients)
+
+  # Decoder input corruption makes the model rely less on perfect previous text tokens.
+  decoder_input_noise:
+    enabled: true
+    probability: 0.1        # Fraction of non-special decoder input tokens to replace with <UNK>
+    replacement: "unk"      # "unk" or "drop"; unk is safer for sequence length stability
 
   # Optimizer
   optimizer: "adamw"         # AdamW = Adam + proper weight decay (best for transformers)
