@@ -10,7 +10,7 @@ import torch
 from torch.utils.data import DataLoader
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data import parse_khatt_dataset, ArabicCharTokenizer, ArabicOCRDataset, collate_fn
+from data import load_dataset_from_config, ArabicCharTokenizer, ArabicOCRDataset, collate_fn
 from preprocessing import ManuscriptPreprocessor
 from model import ScriptFormer
 from training import Trainer
@@ -46,8 +46,7 @@ def main():
 
     set_seed(config["project"]["seed"])
 
-    data_root = config["data"]["raw_dir"] + "/KHATT"
-    data = parse_khatt_dataset(data_root)
+    data = load_dataset_from_config(config)
     train_samples = data["train"]
     val_samples = data["val"]
 

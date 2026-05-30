@@ -14,6 +14,8 @@ project:
 
 # --- Data ---
 data:
+  # Dataset source: "khatt", "ifnenit", or "mixed"
+  dataset: "mixed"
   # Where raw manuscript images live
   raw_dir: "data/raw"
   # Where preprocessed images go
@@ -25,6 +27,8 @@ data:
   train_ratio: 0.8
   val_ratio: 0.1
   test_ratio: 0.1
+  # Validation ratio used for IFN/ENIT deterministic split when no explicit split exists
+  ifnenit_val_ratio: 0.1
 
   # Image dimensions after preprocessing
   # Wider lines are preserved by aspect-ratio resize plus padding instead of squeezing long lines into 1024 px.

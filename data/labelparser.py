@@ -1,5 +1,7 @@
 import csv
 import os
+import hashlib
+from pathlib import Path
 
 BUCKWALTER_TO_ARABIC = {
     # === Basic Arabic Letters (28 letters) ===
@@ -128,7 +130,6 @@ def parse_khatt_csv(csv_path:str,image_dir:str,image_ext:str=".jpg"):
     return samples    
 
 def parse_khatt_dataset(data_root:str)->dict:
-    from pathlib import Path
     result = {}
     root = Path(data_root)
     train_csv = root / "Train.csv"
@@ -148,4 +149,152 @@ def parse_khatt_dataset(data_root:str)->dict:
         result["val"] = []
 
     return result
+
+
+def _ifnenit_token_to_base(token: str) -> str:
+    token = token.strip()
+    if not token:
+        return ""
+    if token in BUCKWALTER_TO_ARABIC:
+        return token
+
+    # IFN/ENIT AW2 tokens often include a position suffix (A/B/M/E).
+    # Try removing one suffix char if that yields a known mapping.
+    if len(token) > 1 and token[-1] in {"A", "B", "M", "E"}:
+        candidate = token[:-1]
+        if candidate in BUCKWALTER_TO_ARABIC:
+            return candidate
+
+    # Handle occasional markers like "llL" that can appear in AW2 streams.
+    candidate = token.replace("llL", "")
+    if candidate in BUCKWALTER_TO_ARABIC:
+        return candidate
+
+    if len(candidate) > 1 and candidate[-1] in {"A", "B", "M", "E"}:
+        candidate2 = candidate[:-1]
+        if candidate2 in BUCKWALTER_TO_ARABIC:
+            return candidate2
+
+    return token
+
+
+def _ifnenit_aw2_to_arabic(aw2_value: str) -> str:
+    tokens = [t for t in aw2_value.split("|") if t.strip()]
+    out = []
+    for token in tokens:
+        base = _ifnenit_token_to_base(token)
+        out.append(BUCKWALTER_TO_ARABIC.get(base, "?"))
+    return "".join(out)
+
+
+def _extract_ifnenit_aw2_label(tru_path: Path) -> str | None:
+    try:
+        lines = tru_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception:
+        return None
+
+    for line in lines:
+        if line.startswith("LBL:") and "AW2:" in line:
+            aw2_part = line.split("AW2:", 1)[1]
+            aw2_value = aw2_part.split(";", 1)[0]
+            if aw2_value.strip():
+                return _ifnenit_aw2_to_arabic(aw2_value)
+    return None
+
+
+def _find_ifnenit_image(set_dir: Path, stem: str) -> str | None:
+    candidates = [
+        set_dir / "bmp" / f"{stem}.bmp",
+        set_dir / "tif" / f"{stem}.tif",
+        set_dir / "tif" / f"{stem}.tif.gz",
+    ]
+    for path in candidates:
+        if path.is_file():
+            return str(path)
+    return None
+
+
+def parse_ifnenit_dataset(data_root: str, val_ratio: float = 0.1) -> dict:
+    """Parse IFN/ENIT dataset from data/set_*/tru + image folders.
+
+    Splits samples deterministically by writer/page prefix to reduce near-duplicate
+    leakage across train/val.
+    """
+    root = Path(data_root)
+    data_root_dir = root / "data"
+    if not data_root_dir.exists():
+        print(f"IFN/ENIT data folder not found: {data_root_dir}")
+        return {"train": [], "val": []}
+
+    all_samples = []
+    set_dirs = sorted([p for p in data_root_dir.glob("set_*") if p.is_dir()])
+    for set_dir in set_dirs:
+        tru_dir = set_dir / "tru"
+        if not tru_dir.exists():
+            continue
+        for tru_file in sorted(tru_dir.glob("*.tru")):
+            stem = tru_file.stem
+            image_path = _find_ifnenit_image(set_dir, stem)
+            if image_path is None:
+                continue
+            text = _extract_ifnenit_aw2_label(tru_file)
+            if not text:
+                continue
+            all_samples.append({"image_path": image_path, "text": text})
+
+    if not all_samples:
+        print("No IFN/ENIT samples parsed")
+        return {"train": [], "val": []}
+
+    def in_val(sample: dict) -> bool:
+        # Use writer/page prefix (e.g., ae07) for deterministic group split.
+        stem = Path(sample["image_path"]).stem
+        group = stem.split("_")[0]
+        score = int(hashlib.md5(group.encode("utf-8")).hexdigest(), 16) % 100
+        return score < int(val_ratio * 100)
+
+    train = [s for s in all_samples if not in_val(s)]
+    val = [s for s in all_samples if in_val(s)]
+
+    # Guard against pathological tiny val set.
+    if not val and train:
+        cut = max(1, int(len(train) * val_ratio))
+        val = train[:cut]
+        train = train[cut:]
+
+    print(f"IFN/ENIT parsed samples: train={len(train)}, val={len(val)}")
+    return {"train": train, "val": val}
+
+
+def load_dataset_from_config(config: dict) -> dict:
+    """Load dataset(s) based on config.data.dataset.
+
+    Supported values:
+    - khatt
+    - ifnenit
+    - mixed (KHATT + IFN/ENIT)
+    """
+    data_cfg = config.get("data", {})
+    raw_dir = data_cfg.get("raw_dir", "data/raw")
+    dataset_mode = str(data_cfg.get("dataset", "khatt")).lower()
+    ifnenit_val_ratio = float(data_cfg.get("ifnenit_val_ratio", data_cfg.get("val_ratio", 0.1)))
+
+    khatt_root = os.path.join(raw_dir, "KHATT")
+    ifnenit_root = os.path.join(raw_dir, "ifnenit")
+
+    if dataset_mode == "khatt":
+        return parse_khatt_dataset(khatt_root)
+
+    if dataset_mode == "ifnenit":
+        return parse_ifnenit_dataset(ifnenit_root, val_ratio=ifnenit_val_ratio)
+
+    if dataset_mode == "mixed":
+        khatt = parse_khatt_dataset(khatt_root)
+        ifnenit = parse_ifnenit_dataset(ifnenit_root, val_ratio=ifnenit_val_ratio)
+        return {
+            "train": khatt["train"] + ifnenit["train"],
+            "val": khatt["val"] + ifnenit["val"],
+        }
+
+    raise ValueError(f"Unknown data.dataset='{dataset_mode}'. Use khatt, ifnenit, or mixed.")
 

@@ -3,7 +3,7 @@ import torch
 import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data import ArabicCharTokenizer,parse_khatt_dataset,ManuscriptPreprocessor,ArabicOCRDataset,DataLoader,collate_fn
+from data import ArabicCharTokenizer,load_dataset_from_config,ManuscriptPreprocessor,ArabicOCRDataset,DataLoader,collate_fn
 import yaml
 from model import ScriptFormer
 from evaluation import compute_metrics, print_evaluation_report
@@ -174,12 +174,12 @@ def main():
     model.eval()
     print(f"  Loaded epoch {checkpoint['epoch']}, val_loss={checkpoint['val_loss']:.4f}")
 
-    data = parse_khatt_dataset(config["data"]["raw_dir"] + "/KHATT")
+    data = load_dataset_from_config(config)
     val_samples = data["val"]
     if not val_samples:
         raise FileNotFoundError(
             "No validation samples were found. "
-            "Make sure the KHATT validation CSV and images are available under data/raw/KHATT, "
+            "Make sure your configured dataset files are available under data/raw, "
             "or run prediction with scripts/predict.py instead of evaluation."
         )
 
