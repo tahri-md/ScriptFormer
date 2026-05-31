@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from preprocessing import ManuscriptPreprocessor
 from .tokenizer import ArabicCharTokenizer
+from preprocessing.transforms import apply_augmentations, to_grayscale
 
 class ArabicOCRDataset(Dataset):
     def __init__(
@@ -15,6 +16,7 @@ class ArabicOCRDataset(Dataset):
         image_height: int = 64,
         image_width: int = 2048,
         max_length: int = 128,
+        augmentation_cfg: dict | None = None,
     ):
         self.samples = samples
         self.tokenizer = tokenizer
@@ -22,6 +24,8 @@ class ArabicOCRDataset(Dataset):
         self.image_height = image_height
         self.image_width = image_width
         self.max_length = max_length
+        self.augmentation_cfg = augmentation_cfg or {}
+        self.augmentation_enabled = bool(self.augmentation_cfg.get("enabled", False))
     
     def __len__(self)->int:
         return len(self.samples)
@@ -33,7 +37,13 @@ class ArabicOCRDataset(Dataset):
         if raw_image is None:
             raise FileNotFoundError(f"could not load image{sample['image_path']}")
         
-        processed = self.preprocessor(raw_image,target_height=self.image_height,target_width=self.image_width)
+        if self.augmentation_enabled:
+            # convert to grayscale first, apply augmentations, then continue pipeline
+            gray = to_grayscale(raw_image)
+            aug = apply_augmentations(gray, self.augmentation_cfg)
+            processed = self.preprocessor(aug, target_height=self.image_height, target_width=self.image_width)
+        else:
+            processed = self.preprocessor(raw_image, target_height=self.image_height, target_width=self.image_width)
         image_tensor = torch.from_numpy(processed).unsqueeze(0).float()
         token_ids = self.tokenizer.encode(
             sample["text"],

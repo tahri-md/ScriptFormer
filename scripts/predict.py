@@ -6,6 +6,7 @@ import yaml
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from inference import OCRPipeline
+from inference.attention_export import export_attention_overlays
 from postprocessing import ArabicPostProcessor
 
 
@@ -14,13 +15,15 @@ def main():
     parser.add_argument("--image", type=str, nargs="+", default=None)
     parser.add_argument("--dir", type=str, default=None)
     parser.add_argument("--checkpoint", type=str, default="checkpoints/best_model.pt")
-    parser.add_argument("--config", type=str, default="configs/default.yaml")
+    parser.add_argument("--config", type=str, default="configs/default.yml")
     parser.add_argument("--tokenizer", type=str, default=None)
     parser.add_argument("--max-length", type=int, default=None)
     parser.add_argument("--beam-size", type=int, default=None)
     parser.add_argument("--no-postprocess", action="store_true")
-    parser.add_argument("--normalize-alef", action="store_true", default=True)
-    parser.add_argument("--remove-diacritics", action="store_true", default=False)
+    parser.add_argument("--normalize-alef", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--remove-diacritics", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--pad-alignment", type=str, choices=["left", "center", "right"], default=None)
+    parser.add_argument("--export-attention-dir", type=str, default=None)
     args = parser.parse_args()
 
     if not args.image and not args.dir:
@@ -35,9 +38,11 @@ def main():
         postprocessor_cfg.update({
             "fix_repetitions": False,
             "clean_punctuation": False,
-            "normalize_alef": args.normalize_alef,
-            "remove_diacritics": args.remove_diacritics,
         })
+        if args.normalize_alef is not None:
+            postprocessor_cfg["normalize_alef"] = args.normalize_alef
+        if args.remove_diacritics is not None:
+            postprocessor_cfg["remove_diacritics"] = args.remove_diacritics
         postprocessor = ArabicPostProcessor(**postprocessor_cfg)
 
     pipeline = OCRPipeline.from_checkpoint(
@@ -46,12 +51,25 @@ def main():
         postprocessor=postprocessor,
         tokenizer_path=args.tokenizer,
         beam_size=args.beam_size,
+        pad_alignment=args.pad_alignment,
     )
 
     if args.image:
         for path in args.image:
-            text = pipeline.predict(path, max_length=args.max_length, beam_size=args.beam_size)
-            print(f"{os.path.basename(path)}: {text}")
+            if args.export_attention_dir:
+                if args.beam_size not in (None, 1):
+                    parser.error("--export-attention-dir currently supports greedy decoding only; use --beam-size 1 or omit --beam-size.")
+                manifest = export_attention_overlays(
+                    pipeline,
+                    path,
+                    args.export_attention_dir,
+                    max_length=args.max_length,
+                )
+                print(f"{os.path.basename(path)}: {manifest['prediction']}")
+                print(f"  attention overlays saved to {manifest['export_dir']}")
+            else:
+                text = pipeline.predict(path, max_length=args.max_length, beam_size=args.beam_size)
+                print(f"{os.path.basename(path)}: {text}")
 
     elif args.dir:
         results = pipeline.predict_directory(args.dir, max_length=args.max_length, beam_size=args.beam_size)
@@ -64,6 +82,21 @@ def main():
                 print(f"{filename}: {r['text']}")
                 f.write(f'"{filename}","{pred}"\n')
         print(f"\nSaved to {out_path}")
+
+        if args.export_attention_dir:
+            if args.beam_size not in (None, 1):
+                parser.error("--export-attention-dir currently supports greedy decoding only; use --beam-size 1 or omit --beam-size.")
+            for item in results:
+                if item.get("error"):
+                    print(f"Skipping {item['path']}: {item['error']}")
+                    continue
+                manifest = export_attention_overlays(
+                    pipeline,
+                    item["path"],
+                    args.export_attention_dir,
+                    max_length=args.max_length,
+                )
+                print(f"attention overlays saved to {manifest['export_dir']}")
 
 
 if __name__ == "__main__":

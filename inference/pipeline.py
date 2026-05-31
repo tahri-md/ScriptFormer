@@ -81,6 +81,7 @@ class OCRPipeline:
         postprocessor: ArabicPostProcessor = None,
         tokenizer_path: str = None,
         beam_size: int = None,
+        pad_alignment: str = None,
     ) -> "OCRPipeline":
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
@@ -89,6 +90,11 @@ class OCRPipeline:
         else:
             with open(config_path, "r") as f:
                 config = yaml.safe_load(f)
+
+        if pad_alignment is not None:
+            config = dict(config)
+            config["preprocessing"] = dict(config.get("preprocessing", {}))
+            config["preprocessing"]["pad_alignment"] = pad_alignment
 
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"

@@ -242,15 +242,17 @@ def main():
     print(f"\nComputing metrics on {len(all_predictions)} samples...\n")
 
     if postprocessor:
-        raw_metrics = compute_metrics(all_raw_predictions, normalized_references)
+        # Compare raw predictions against raw references to keep a true baseline.
+        # Postprocessed predictions are compared against normalized references.
+        raw_metrics = compute_metrics(all_raw_predictions, all_references)
         pp_metrics = compute_metrics(all_predictions, normalized_references)
 
         print("=" * 60)
-        print("  WITHOUT postprocessing:")
+        print("  WITHOUT postprocessing (raw predictions vs raw references):")
         print(f"    CER: {raw_metrics['cer']:.4f}  ({raw_metrics['cer']*100:.1f}%)")
         print(f"    WER: {raw_metrics['wer']:.4f}  ({raw_metrics['wer']*100:.1f}%)")
         print()
-        print("  WITH postprocessing:")
+        print("  WITH postprocessing (normalized predictions vs normalized references):")
         print(f"    CER: {pp_metrics['cer']:.4f}  ({pp_metrics['cer']*100:.1f}%)")
         print(f"    WER: {pp_metrics['wer']:.4f}  ({pp_metrics['wer']*100:.1f}%)")
 

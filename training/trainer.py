@@ -309,7 +309,7 @@ class Trainer:
             path = self.checkpoint_dir / f"checkpoint_epoch_{epoch}.pt"
             torch.save(checkpoint, path)
 
-    def load_checkpoint(self, checkpoint_path: str):
+    def load_checkpoint(self, checkpoint_path: str, learning_rate: float | None = None):
         print(f"Loading checkpoint from {checkpoint_path}...")
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
 
@@ -322,6 +322,14 @@ class Trainer:
             print(f"  Warning: unexpected keys in checkpoint: {loaded.unexpected_keys}")
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+
+        if learning_rate is not None:
+            for group in self.optimizer.param_groups:
+                group["lr"] = learning_rate
+            self.scheduler.base_lrs = [learning_rate for _ in self.scheduler.base_lrs]
+            if hasattr(self.scheduler, "_last_lr"):
+                self.scheduler._last_lr = [learning_rate for _ in self.scheduler._last_lr]
+            print(f"  Overrode resumed learning rate to {learning_rate:.2e}")
 
         self.global_step = checkpoint["global_step"]
         self.best_val_loss = checkpoint["best_val_loss"]

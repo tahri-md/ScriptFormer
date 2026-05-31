@@ -66,11 +66,15 @@ def main():
     max_len = config["model"]["decoder"]["max_length"]
     batch_size = config["training"]["batch_size"]
 
+    augmentation_cfg = config.get("preprocessing", {}).get("augmentation", {})
+
     train_dataset = ArabicOCRDataset(
         train_samples, tokenizer, preprocessor, img_h, img_w, max_len,
+        augmentation_cfg=augmentation_cfg,
     )
     val_dataset = ArabicOCRDataset(
         val_samples, tokenizer, preprocessor, img_h, img_w, max_len,
+        augmentation_cfg={},
     )
 
     train_loader = DataLoader(
@@ -119,7 +123,7 @@ def main():
     )
 
     if args.resume:
-        trainer.load_checkpoint(args.resume)
+        trainer.load_checkpoint(args.resume, learning_rate=config["training"]["learning_rate"] if args.lr is not None else None)
 
     trainer.train()
 
