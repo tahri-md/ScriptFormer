@@ -344,6 +344,83 @@ def parse_generated_dataset(data_root: str, val_ratio: float = 0.1) -> dict:
     return {"train": train, "val": val}
 
 
+def parse_muharaf_dataset(data_root: str, val_ratio: float = 0.1) -> dict:
+    """Parse Muharaf / public line images datasets.
+
+    Expected layout (common variants):
+    - raw/public_line_images/public/*.png and corresponding .txt files with the same stem
+    - or raw/public_line_images/*.png + .txt
+
+    The parser pairs each image with a text file of the same stem and performs a
+    deterministic train/val split based on the image stem hash.
+    """
+    root = Path(data_root)
+    # Try a few common locations
+    candidates = [root, root / "public", root / "public_line_images", root / "public_line_images" / "public"]
+    chosen = None
+    for c in candidates:
+        if c.exists() and any(c.glob("*.*")):
+            chosen = c
+            break
+
+    if chosen is None:
+        print(f"Muharaf/public line images folder not found under: {data_root}")
+        return {"train": [], "val": []}
+
+    image_exts = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
+    samples = []
+    for img_path in sorted(chosen.glob("**/*")):
+        if not img_path.is_file():
+            continue
+        if img_path.suffix.lower() not in image_exts:
+            continue
+        stem = img_path.stem
+        # possible label files
+        txt_candidates = [img_path.with_suffix('.txt'), img_path.with_suffix('.gt.txt'), img_path.with_suffix('.trans.txt')]
+        label = None
+        for t in txt_candidates:
+            if t.exists():
+                try:
+                    label = t.read_text(encoding='utf-8', errors='replace').strip().splitlines()[0].strip()
+                except Exception:
+                    label = None
+                break
+
+        if label is None or label == "":
+            # try sibling .txt with same name in parent
+            sibling = img_path.parent / (stem + '.txt')
+            if sibling.exists():
+                try:
+                    label = sibling.read_text(encoding='utf-8', errors='replace').strip().splitlines()[0].strip()
+                except Exception:
+                    label = None
+
+        if label is None or label == "":
+            continue
+
+        samples.append({"image_path": str(img_path), "text": label})
+
+    if not samples:
+        print(f"No Muharaf/public_line_images samples parsed from {chosen}")
+        return {"train": [], "val": []}
+
+    def in_val(sample: dict) -> bool:
+        stem = Path(sample["image_path"]).stem
+        score = int(hashlib.md5(stem.encode("utf-8")).hexdigest(), 16) % 100
+        return score < int(val_ratio * 100)
+
+    train = [s for s in samples if not in_val(s)]
+    val = [s for s in samples if in_val(s)]
+
+    if not val and train:
+        cut = max(1, int(len(train) * val_ratio))
+        val = train[:cut]
+        train = train[cut:]
+
+    print(f"Muharaf/public parsed samples: train={len(train)}, val={len(val)}")
+    return {"train": train, "val": val}
+
+
 def load_dataset_from_config(config: dict) -> dict:
     """Load dataset(s) based on config.data.dataset.
 
@@ -361,6 +438,7 @@ def load_dataset_from_config(config: dict) -> dict:
     khatt_root = os.path.join(raw_dir, "KHATT")
     ifnenit_root = os.path.join(raw_dir, "ifnenit")
     generated_root = os.path.join(raw_dir, "generated_data")
+    muharaf_root = os.path.join(raw_dir, "public_line_images")
 
     if dataset_mode == "khatt":
         return parse_khatt_dataset(khatt_root)
@@ -370,6 +448,9 @@ def load_dataset_from_config(config: dict) -> dict:
 
     if dataset_mode == "generated":
         return parse_generated_dataset(generated_root, val_ratio=data_cfg.get("val_ratio", 0.1))
+
+    if dataset_mode in {"muharaf", "public", "public_line_images"}:
+        return parse_muharaf_dataset(muharaf_root, val_ratio=data_cfg.get("val_ratio", 0.1))
 
     if dataset_mode == "mixed":
         khatt = parse_khatt_dataset(khatt_root)
