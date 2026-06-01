@@ -68,8 +68,16 @@ def main():
                 print(f"{os.path.basename(path)}: {manifest['prediction']}")
                 print(f"  attention overlays saved to {manifest['export_dir']}")
             else:
-                text = pipeline.predict(path, max_length=args.max_length, beam_size=args.beam_size)
-                print(f"{os.path.basename(path)}: {text}")
+                result = pipeline.predict(path, max_length=args.max_length, beam_size=args.beam_size)
+                if isinstance(result, dict):
+                    text = result.get("text", "")
+                    conf = result.get("confidence", None)
+                    if conf is not None:
+                        print(f"{os.path.basename(path)}: {text}  (confidence={conf:.3f})")
+                    else:
+                        print(f"{os.path.basename(path)}: {text}")
+                else:
+                    print(f"{os.path.basename(path)}: {result}")
 
     elif args.dir:
         results = pipeline.predict_directory(args.dir, max_length=args.max_length, beam_size=args.beam_size)

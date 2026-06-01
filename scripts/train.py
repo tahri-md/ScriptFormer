@@ -30,6 +30,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--lr", type=float, default=None)
+    parser.add_argument("--dataset", type=str, default=None)
     parser.add_argument("--resume", type=str, default=None)
     parser.add_argument("--debug-shapes", action="store_true")
     args = parser.parse_args()
@@ -43,6 +44,8 @@ def main():
         config["training"]["batch_size"] = args.batch_size
     if args.lr is not None:
         config["training"]["learning_rate"] = args.lr
+    if args.dataset is not None:
+        config.setdefault("data", {})["dataset"] = args.dataset
 
     set_seed(config["project"]["seed"])
 
@@ -95,6 +98,7 @@ def main():
     model = ScriptFormer(
         vocab_size=tokenizer.vocab_size,
         encoder_type=config.get("model", {}).get("encoder", {}).get("type", "cnn"),
+        encoder_model_name=config.get("model", {}).get("encoder", {}).get("model_name", "microsoft/beit-base-patch16-224-pt22k"),
         encoder_pretrained=config.get("model", {}).get("encoder", {}).get("pretrained", False),
         encoder_freeze_backbone=config.get("model", {}).get("encoder", {}).get("freeze_backbone", False),
         encoder_hidden=config["model"]["decoder"]["hidden_size"],

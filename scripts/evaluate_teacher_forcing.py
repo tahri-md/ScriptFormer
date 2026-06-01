@@ -65,6 +65,7 @@ def main():
     model = ScriptFormer(
         vocab_size=tokenizer.vocab_size,
         encoder_type=config.get("model", {}).get("encoder", {}).get("type", "cnn"),
+        encoder_model_name=config.get("model", {}).get("encoder", {}).get("model_name", "microsoft/beit-base-patch16-224-pt22k"),
         encoder_pretrained=config.get("model", {}).get("encoder", {}).get("pretrained", False),
         encoder_freeze_backbone=config.get("model", {}).get("encoder", {}).get("freeze_backbone", False),
         encoder_hidden=hidden_size,

@@ -266,12 +266,91 @@ def parse_ifnenit_dataset(data_root: str, val_ratio: float = 0.1) -> dict:
     return {"train": train, "val": val}
 
 
+def parse_generated_dataset(data_root: str, val_ratio: float = 0.1) -> dict:
+    """Parse the generated line-image dataset stored under raw/generated_data.
+
+    Expected layout:
+    - raw/generated_data/data.csv with columns: img_path,text
+    - image paths can be relative to raw/generated_data or already absolute
+
+    The dataset is split deterministically so the same config produces the same
+    train/val partitions across runs.
+    """
+    root = Path(data_root)
+    csv_path = root / "data.csv"
+    if not csv_path.exists():
+        print(f"Generated dataset CSV not found: {csv_path}")
+        return {"train": [], "val": []}
+
+    def _resolve_generated_image_path(root_dir: Path, raw_path: str) -> Path | None:
+        path = Path(raw_path)
+        candidates = []
+
+        if path.is_absolute():
+            candidates.append(path)
+        else:
+            candidates.append(root_dir / path)
+
+        parts = path.parts
+        if "line_images" in parts:
+            suffix = Path(*parts[parts.index("line_images") + 1 :])
+            candidates.append(root_dir / suffix)
+        if len(parts) >= 2 and parts[0] == "dataset" and parts[1] == "line_images":
+            candidates.append(root_dir / Path(*parts[2:]))
+
+        candidates.append(root_dir / path.name)
+
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        return None
+
+    samples = []
+    with csv_path.open("r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if not row:
+                continue
+
+            rel_image_path = (row.get("img_path") or row.get("image_path") or "").strip()
+            text = (row.get("text") or "").strip()
+            if not rel_image_path or not text:
+                continue
+
+            image_path = _resolve_generated_image_path(root, rel_image_path)
+            if image_path is None:
+                continue
+
+            samples.append({"image_path": str(image_path), "text": text})
+
+    if not samples:
+        print(f"No generated samples parsed from {csv_path}")
+        return {"train": [], "val": []}
+
+    def in_val(sample: dict) -> bool:
+        stem = Path(sample["image_path"]).stem
+        score = int(hashlib.md5(stem.encode("utf-8")).hexdigest(), 16) % 100
+        return score < int(val_ratio * 100)
+
+    train = [s for s in samples if not in_val(s)]
+    val = [s for s in samples if in_val(s)]
+
+    if not val and train:
+        cut = max(1, int(len(train) * val_ratio))
+        val = train[:cut]
+        train = train[cut:]
+
+    print(f"Generated dataset parsed samples: train={len(train)}, val={len(val)}")
+    return {"train": train, "val": val}
+
+
 def load_dataset_from_config(config: dict) -> dict:
     """Load dataset(s) based on config.data.dataset.
 
     Supported values:
     - khatt
     - ifnenit
+    - generated
     - mixed (KHATT + IFN/ENIT)
     """
     data_cfg = config.get("data", {})
@@ -281,12 +360,16 @@ def load_dataset_from_config(config: dict) -> dict:
 
     khatt_root = os.path.join(raw_dir, "KHATT")
     ifnenit_root = os.path.join(raw_dir, "ifnenit")
+    generated_root = os.path.join(raw_dir, "generated_data")
 
     if dataset_mode == "khatt":
         return parse_khatt_dataset(khatt_root)
 
     if dataset_mode == "ifnenit":
         return parse_ifnenit_dataset(ifnenit_root, val_ratio=ifnenit_val_ratio)
+
+    if dataset_mode == "generated":
+        return parse_generated_dataset(generated_root, val_ratio=data_cfg.get("val_ratio", 0.1))
 
     if dataset_mode == "mixed":
         khatt = parse_khatt_dataset(khatt_root)
@@ -296,5 +379,5 @@ def load_dataset_from_config(config: dict) -> dict:
             "val": khatt["val"] + ifnenit["val"],
         }
 
-    raise ValueError(f"Unknown data.dataset='{dataset_mode}'. Use khatt, ifnenit, or mixed.")
+    raise ValueError(f"Unknown data.dataset='{dataset_mode}'. Use khatt, ifnenit, generated, or mixed.")
 

@@ -76,7 +76,7 @@ class OCRPipeline:
     def from_checkpoint(
         cls,
         checkpoint_path: str,
-        config_path: str = "configs/default.yaml",
+        config_path: str = "configs/default.yml",
         device: str = None,
         postprocessor: ArabicPostProcessor = None,
         tokenizer_path: str = None,
@@ -133,6 +133,7 @@ class OCRPipeline:
         model = ScriptFormer(
             vocab_size=tokenizer.vocab_size,
             encoder_type=config.get("model", {}).get("encoder", {}).get("type", "cnn"),
+            encoder_model_name=config.get("model", {}).get("encoder", {}).get("model_name", "microsoft/beit-base-patch16-224-pt22k"),
             encoder_pretrained=config.get("model", {}).get("encoder", {}).get("pretrained", False),
             encoder_freeze_backbone=config.get("model", {}).get("encoder", {}).get("freeze_backbone", False),
             encoder_hidden=hidden_size,
@@ -243,27 +244,54 @@ class OCRPipeline:
             max_length = self.max_length
         if beam_size is None:
             beam_size = self.beam_size
-
         image_tensor = self._load_and_preprocess(image_path)
 
+        # Generate tokens
         with torch.no_grad():
+            # compute encoder output ourselves so we can reuse it to compute logits
+            encoder_output = self.model.encoder(image_tensor)
+            if getattr(self.model, "encoder_transformer", None) is not None:
+                encoder_output = self.model.encoder_transformer(encoder_output)
+
             generated_ids = self.model.generate(
                 image_tensor,
                 max_length=max_length,
                 beam_size=beam_size,
             )
 
+            # compute confidence: run decoder on generated sequence and compute
+            # average token probability for produced tokens (excluding SOS/PAD)
+            try:
+                logits = self.model.decoder(encoder_output, generated_ids)
+                probs = torch.softmax(logits, dim=-1)
+                # gather probability of each generated token
+                gen_tokens = generated_ids
+                # shift to align logits (logits correspond to positions of gen_tokens)
+                token_probs = probs.gather(dim=-1, index=gen_tokens.unsqueeze(-1)).squeeze(-1)
+                # mask out PAD and SOS tokens for confidence averaging
+                mask = (gen_tokens != self.model.pad_id) & (gen_tokens != self.model.sos_id)
+                if mask.any():
+                    avg_confidence = token_probs[mask].mean().item()
+                else:
+                    avg_confidence = float(token_probs.mean().item())
+            except Exception:
+                avg_confidence = 0.0
+
         text = self.tokenizer.decode(generated_ids[0].tolist())
         text = self.postprocessor(text)
 
-        return text
+        # Attach confidence as an attribute on return for callers that expect it
+        return {"text": text, "confidence": avg_confidence, "ids": generated_ids}
 
     def predict_batch(self, image_paths: list[str], max_length: int = None, beam_size: int = None) -> list[dict]:
         results = []
         for path in image_paths:
             try:
-                text = self.predict(path, max_length=max_length, beam_size=beam_size)
-                results.append({"path": path, "text": text})
+                res = self.predict(path, max_length=max_length, beam_size=beam_size)
+                if isinstance(res, dict):
+                    results.append({"path": path, "text": res.get("text", ""), "confidence": res.get("confidence")})
+                else:
+                    results.append({"path": path, "text": res})
             except Exception as e:
                 results.append({"path": path, "text": "", "error": str(e)})
         return results

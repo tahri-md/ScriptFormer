@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+import warnings
 
 try:
     from torchvision.models import resnet18, resnet34, ResNet18_Weights, ResNet34_Weights
@@ -10,6 +11,12 @@ except Exception:
     resnet34 = None
     ResNet18_Weights = None
     ResNet34_Weights = None
+
+try:
+    from transformers import BeitConfig, BeitModel
+except Exception:
+    BeitConfig = None
+    BeitModel = None
 
 class ConvBlock(nn.Module):
     def __init__(self,in_channels:int,out_channels:int,pool_kernel_size:int | tuple[int, int] = 2):
@@ -152,6 +159,67 @@ class ResNetEncoder(nn.Module):
         B, C, H, W = x.shape
         x = x.mean(dim=2)
         x = x.permute(0, 2, 1)
+        x = self.projection(x)
+        x = self.dropout(x)
+        x = self.norm(x)
+        return x
+
+
+class BEiTEncoder(nn.Module):
+    def __init__(
+        self,
+        hidden_size: int = 256,
+        dropout: float = 0.1,
+        model_name: str = "microsoft/beit-base-patch16-224-pt22k",
+        pretrained: bool = True,
+        freeze_backbone: bool = False,
+    ):
+        super().__init__()
+        self.model_name = model_name
+        self.backbone = self._build_backbone(model_name, pretrained=pretrained)
+        backbone_dim = int(getattr(self.backbone.config, "hidden_size", hidden_size))
+
+        self.backbone_dim = backbone_dim
+        self.projection = nn.Linear(backbone_dim, hidden_size)
+        self.dropout = nn.Dropout(dropout)
+        self.norm = nn.LayerNorm(hidden_size)
+
+        if freeze_backbone:
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+
+    @staticmethod
+    def _build_backbone(model_name: str, pretrained: bool = True) -> nn.Module:
+        if BeitModel is None:
+            raise ImportError(
+                "transformers is required for the BEiT encoder. Install transformers or set model.encoder.type to 'cnn'."
+            )
+
+        if pretrained:
+            try:
+                return BeitModel.from_pretrained(model_name)
+            except Exception as exc:
+                warnings.warn(
+                    f"Could not load pretrained BEiT weights from '{model_name}': {exc}. Falling back to a randomly initialized BEiT backbone.",
+                    stacklevel=2,
+                )
+
+        config = BeitConfig()
+        return BeitModel(config)
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        if images.size(1) == 1:
+            x = images.repeat(1, 3, 1, 1)
+        elif images.size(1) == 3:
+            x = images
+        else:
+            raise ValueError(f"BEiTEncoder expects 1 or 3 input channels, got {images.size(1)}")
+
+        outputs = self.backbone(pixel_values=x, interpolate_pos_encoding=True)
+        x = outputs.last_hidden_state
+        if x.size(1) > 1:
+            x = x[:, 1:, :]
+
         x = self.projection(x)
         x = self.dropout(x)
         x = self.norm(x)
@@ -305,6 +373,7 @@ class ScriptFormer(nn.Module):
         vocab_size: int,
         encoder_hidden: int = 256,
         encoder_type: str = "cnn",
+        encoder_model_name: str = "microsoft/beit-base-patch16-224-pt22k",
         encoder_pretrained: bool = False,
         encoder_freeze_backbone: bool = False,
         decoder_hidden: int = 256,
@@ -344,9 +413,17 @@ class ScriptFormer(nn.Module):
                 pretrained=encoder_pretrained,
                 freeze_backbone=encoder_freeze_backbone,
             )
+        elif encoder_type == "beit":
+            self.encoder = BEiTEncoder(
+                hidden_size=encoder_hidden,
+                dropout=dropout,
+                model_name=encoder_model_name,
+                pretrained=encoder_pretrained,
+                freeze_backbone=encoder_freeze_backbone,
+            )
         else:
             raise ValueError(
-                f"Unknown encoder_type={encoder_type!r}. Use 'cnn', 'resnet18', or 'resnet34'."
+                f"Unknown encoder_type={encoder_type!r}. Use 'cnn', 'beit', 'resnet18', or 'resnet34'."
             )
         self.encoder_type = encoder_type
         self.encoder_pretrained = encoder_pretrained

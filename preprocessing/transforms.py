@@ -82,6 +82,63 @@ def normalize(image:np.ndarray)->np.ndarray:
     return image.astype(np.float32)/255.0
 
 
+class BlackBoxProcessor:
+    def __init__(self, config: dict):
+        self.enabled = config.get("enabled", False)
+        self.method = config.get("method", "clahe_unsharp")
+        self.clip_limit = float(config.get("clip_limit", 2.0))
+        self.tile_grid_size = tuple(config.get("tile_grid_size", (8, 8)))
+        self.gamma = float(config.get("gamma", 1.0))
+        self.unsharp_amount = float(config.get("unsharp_amount", 1.2))
+        self.unsharp_sigma = float(config.get("unsharp_sigma", 1.0))
+
+    def _apply_clahe(self, image: np.ndarray) -> np.ndarray:
+        clahe = cv2.createCLAHE(
+            clipLimit=self.clip_limit,
+            tileGridSize=(int(self.tile_grid_size[0]), int(self.tile_grid_size[1])),
+        )
+        return clahe.apply(image)
+
+    def _apply_gamma(self, image: np.ndarray) -> np.ndarray:
+        if self.gamma == 1.0:
+            return image
+        normalized = np.clip(image.astype(np.float32) / 255.0, 0.0, 1.0)
+        adjusted = np.power(normalized, self.gamma)
+        return np.clip(adjusted * 255.0, 0, 255).astype(np.uint8)
+
+    def _apply_unsharp(self, image: np.ndarray) -> np.ndarray:
+        if self.unsharp_amount <= 0:
+            return image
+        blurred = cv2.GaussianBlur(image, (0, 0), self.unsharp_sigma)
+        sharpened = cv2.addWeighted(
+            image,
+            1.0 + self.unsharp_amount,
+            blurred,
+            -self.unsharp_amount,
+            0,
+        )
+        return np.clip(sharpened, 0, 255).astype(np.uint8)
+
+    def __call__(self, image: np.ndarray) -> np.ndarray:
+        if not self.enabled:
+            return image
+
+        img = np.asarray(image)
+        if img.dtype != np.uint8:
+            img = np.clip(img, 0, 255).astype(np.uint8)
+
+        if self.method in {"clahe", "clahe_unsharp", "blackbox"}:
+            img = self._apply_clahe(img)
+
+        if self.method in {"gamma", "clahe_gamma", "clahe_unsharp", "blackbox"}:
+            img = self._apply_gamma(img)
+
+        if self.method in {"unsharp", "clahe_unsharp", "blackbox"}:
+            img = self._apply_unsharp(img)
+
+        return img
+
+
 def _elastic_distortion(image: np.ndarray, alpha: float = 36, sigma: float = 6) -> np.ndarray:
     shape = image.shape
     random_state = np.random.RandomState(None)
@@ -152,9 +209,11 @@ class ManuscriptPreprocessor:
         self.denoise_method = config.get("denoising", {}).get("method", "morphological")
         self.denoise_kernel = config.get("denoising", {}).get("kernel_size", 3)
         self.pad_alignment = config.get("pad_alignment", "left")
+        self.blackbox = BlackBoxProcessor(config.get("blackbox", {}))
 
     def __call__(self, image: np.ndarray, target_height: int = 64, target_width: int = 2048) -> np.ndarray:
         img = to_grayscale(image)
+        img = self.blackbox(img)
         # binarize expects image first, then method, then kwargs
         img = binarize(self.bin_method, img, window_size=self.bin_window, k=self.bin_k)
 

@@ -14,8 +14,10 @@ project:
 
 # --- Data ---
 data:
-  # Dataset source: "khatt", "ifnenit", or "mixed"
-  dataset: "mixed"
+  # Dataset source: "generated", "khatt", "ifnenit", or "mixed"
+  # Default now points to the generated line-image corpus for the first training stage.
+  # Fine-tune later by switching this to "khatt" and resuming from the generated checkpoint.
+  dataset: "generated"
   # Where raw manuscript images live
   raw_dir: "data/raw"
   # Where preprocessed images go
@@ -27,7 +29,7 @@ data:
   train_ratio: 0.8
   val_ratio: 0.1
   test_ratio: 0.1
-  # Validation ratio used for IFN/ENIT deterministic split when no explicit split exists
+  # Validation ratio used for IFN/ENIT deterministic split when that corpus is enabled.
   ifnenit_val_ratio: 0.1
 
   # Image dimensions after preprocessing
@@ -92,8 +94,11 @@ model:
   # === ENCODER (Pretrained visual backbone) ===
   # Takes an image → sequence of visual features
   encoder:
-    type: "resnet34"         # "cnn", "resnet18", or "resnet34"
-    pretrained: true         # Use ImageNet pretrained weights for the visual backbone
+    type: "beit"             # "cnn", "beit", "resnet18", or "resnet34"
+    # BEiT is now the default encoder experiment. It keeps the same decoder
+    # stack, but gives us a stronger transformer-style visual backbone.
+    pretrained: true         # Try pretrained BEiT weights; fallback to random init if unavailable.
+    model_name: "microsoft/beit-base-patch16-224-pt22k"
     freeze_backbone: false   # Set true to train only the projection + decoder first
     hidden_size: 256         # Project visual features into the decoder dimension
     dropout: 0.1
@@ -118,6 +123,17 @@ model:
     num_heads: 8
     feedforward_size: 512
     dropout: 0.1
+
+  # Optional opaque enhancement stage for ablation testing.
+  # Enables a simple "black box" image processor before binarization.
+  blackbox:
+    enabled: true
+    method: "clahe_unsharp"
+    clip_limit: 2.0
+    tile_grid_size: [8, 8]
+    gamma: 1.0
+    unsharp_amount: 1.2
+    unsharp_sigma: 1.0
 
 # --- Training ---
 training:
