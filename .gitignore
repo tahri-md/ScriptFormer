@@ -1,23 +1,55 @@
+# Byte-compiled / cache
 __pycache__/
+*.py[cod]
+*$py.class
 
+# Virtual environments
 .venv/
+env/
+venv/
+venv.bak/
 
-configs/
+# Editor/IDE directories
+.vscode/
+.idea/
+
+# Python packaging
+dist/
+build/
+eggs/
+*.egg-info/
+
+# Data and model artifacts
 data/raw/
 data/raw/ifnenit/
+configs/
 checkpoints/
+outputs/
 *.pt
 *.pth
 *.bin
 *.ckpt
+
+# Notebooks
+*.ipynb
 scriptformer-kaggle(1).ipynb
-outputs/
+
+# Images / media
 *.png
 *.jpg
 *.jpeg
 *.pdf
 *.html
-DEFAULT_YML_EXPLAINED.md
-PROJECT_FLOW.md
 Untitled.png
 engproc-112-00041-v2-1.pdf
+
+# Tokenizer / generated files
+tokenizer.json
+
+# Misc temporary files
+*.log
+.pytest_cache/
+
+# Keep documentation files tracked
+# DEFAULT_YML_EXPLAINED.md
+# PROJECT_FLOW.md
